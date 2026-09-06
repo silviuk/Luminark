@@ -486,6 +486,223 @@ namespace Lumina.ViewModels
 
         #endregion
 
+        #region Flyout & Automation Status Properties
+
+        public bool IsMonitorsLinked
+        {
+            get => _settings.IsMonitorsLinked;
+            set
+            {
+                if (_settings.IsMonitorsLinked != value)
+                {
+                    _settings.IsMonitorsLinked = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LinkMonitorsButtonText));
+                    OnPropertyChanged(nameof(LinkMonitorsIcon));
+                    SaveSettings();
+                }
+            }
+        }
+
+        public string LinkMonitorsButtonText => IsMonitorsLinked ? "Monitors Linked" : "Monitors Independent";
+        public string LinkMonitorsIcon => IsMonitorsLinked ? "\uE71B" : "\uE785"; // Link / Unlink icon
+
+        public void ToggleMonitorsLinked()
+        {
+            IsMonitorsLinked = !IsMonitorsLinked;
+        }
+
+        public int LockScreenDelaySeconds
+        {
+            get => _settings.LockScreenDelaySeconds;
+            set
+            {
+                if (_settings.LockScreenDelaySeconds != value)
+                {
+                    _settings.LockScreenDelaySeconds = Math.Clamp(value, 0, 60);
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LockDelayDisplayText));
+                    SaveSettings();
+                }
+            }
+        }
+
+        public string LockDelayDisplayText => LockScreenDelaySeconds == 0 ? "Instant" : $"{LockScreenDelaySeconds}s delay";
+
+        public string AutomationModeText
+        {
+            get
+            {
+                if (_settings.SyncWithNightLight)
+                {
+                    return _settings.NightLightSyncMode switch
+                    {
+                        0 => "Following Windows Night Light",
+                        1 => "Following Sunset & Sunrise",
+                        2 => "Driving Windows Night Light",
+                        _ => "Night Light Active"
+                    };
+                }
+                if (_settings.AutoThemeEnabled)
+                {
+                    return "Active Daily Schedule";
+                }
+                return "Manual Control";
+            }
+        }
+
+        public string AutomationModeIcon
+        {
+            get
+            {
+                if (_settings.SyncWithNightLight) return "\uE708"; // Sun/Moon
+                if (_settings.AutoThemeEnabled) return "\uE823"; // Clock
+                return "\uE713"; // Settings
+            }
+        }
+
+        public string NextToggleStatusText
+        {
+            get
+            {
+                var now = DateTime.Now.TimeOfDay;
+                if (_settings.SyncWithNightLight)
+                {
+                    if (_settings.NightLightSyncMode == 0)
+                    {
+                        bool active = _nightLightService.IsNightLightActive();
+                        return active ? "Night Light active (Dark Mode)" : "Night Light inactive (Light Mode)";
+                    }
+                    if (_settings.NightLightSyncMode == 1)
+                    {
+                        var info = _nightLightService.GetNightLightInfo();
+                        var dayStart = info.Sunrise ?? _settings.DayTime;
+                        var nightStart = info.Sunset ?? _settings.NightTime;
+                        bool isDay = ScheduleService.IsDaytime(now, dayStart, nightStart);
+                        return isDay
+                            ? $"Next: Dark at Sunset ({nightStart.Hours:D2}:{nightStart.Minutes:D2})"
+                            : $"Next: Light at Sunrise ({dayStart.Hours:D2}:{dayStart.Minutes:D2})";
+                    }
+                    if (_settings.NightLightSyncMode == 2)
+                    {
+                        bool isDay = ScheduleService.IsDaytime(now, _settings.DayTime, _settings.NightTime);
+                        return isDay
+                            ? $"Next: Dark Mode at {_settings.NightTime.Hours:D2}:{_settings.NightTime.Minutes:D2}"
+                            : $"Next: Light Mode at {_settings.DayTime.Hours:D2}:{_settings.DayTime.Minutes:D2}";
+                    }
+                }
+
+                if (_settings.AutoThemeEnabled)
+                {
+                    bool isDay = ScheduleService.IsDaytime(now, _settings.DayTime, _settings.NightTime);
+                    return isDay
+                        ? $"Next: Dark Mode at {_settings.NightTime.Hours:D2}:{_settings.NightTime.Minutes:D2}"
+                        : $"Next: Light Mode at {_settings.DayTime.Hours:D2}:{_settings.DayTime.Minutes:D2}";
+                }
+
+                return "Manual control (No schedule active)";
+            }
+        }
+
+        private System.Windows.Threading.DispatcherTimer? _lockCountdownTimer;
+        private int _lockCountdownRemaining = 0;
+        private bool _isLockingCountdown = false;
+
+        public bool IsLockingCountdown
+        {
+            get => _isLockingCountdown;
+            set
+            {
+                if (_isLockingCountdown != value)
+                {
+                    _isLockingCountdown = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsNotLockingCountdown));
+                }
+            }
+        }
+
+        public bool IsNotLockingCountdown => !IsLockingCountdown;
+
+        public int LockCountdownRemaining
+        {
+            get => _lockCountdownRemaining;
+            set
+            {
+                if (_lockCountdownRemaining != value)
+                {
+                    _lockCountdownRemaining = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LockCountdownText));
+                }
+            }
+        }
+
+        public string LockCountdownText => $"Locking in {LockCountdownRemaining}s... [Cancel]";
+
+        public void StartLockAndTurnOff()
+        {
+            if (LockScreenDelaySeconds <= 0)
+            {
+                ExecuteLockAndTurnOff();
+                return;
+            }
+
+            LockCountdownRemaining = LockScreenDelaySeconds;
+            IsLockingCountdown = true;
+
+            _lockCountdownTimer?.Stop();
+            _lockCountdownTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _lockCountdownTimer.Tick += (s, e) =>
+            {
+                LockCountdownRemaining--;
+                if (LockCountdownRemaining <= 0)
+                {
+                    _lockCountdownTimer.Stop();
+                    IsLockingCountdown = false;
+                    ExecuteLockAndTurnOff();
+                }
+            };
+            _lockCountdownTimer.Start();
+        }
+
+        public void CancelLockCountdown()
+        {
+            _lockCountdownTimer?.Stop();
+            IsLockingCountdown = false;
+        }
+
+        public void ExecuteLockAndTurnOff()
+        {
+            App.Log("[MainViewModel] Executing LockWorkStation and powering off monitors");
+            try
+            {
+                NativeMethods.LockWorkStation();
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
+            }
+
+            System.Threading.Tasks.Task.Delay(600).ContinueWith(_ =>
+            {
+                try
+                {
+                    NativeMethods.PostMessage(
+                        (IntPtr)NativeMethods.HWND_BROADCAST,
+                        NativeMethods.WM_SYSCOMMAND,
+                        (IntPtr)NativeMethods.SC_MONITORPOWER,
+                        (IntPtr)2);
+                }
+                catch { }
+            });
+        }
+
+        #endregion
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {

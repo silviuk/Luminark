@@ -15,6 +15,9 @@ namespace Lumina
     {
         private readonly MainViewModel _viewModel;
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
+        private TrayFlyoutWindow? _flyoutWindow;
+        private TrayScrollHook? _scrollHook;
+        private System.Windows.Threading.DispatcherTimer? _clickTimer;
         private bool _isExplicitExit = false;
 
         public List<int> HoursList { get; } = Enumerable.Range(0, 24).ToList();
@@ -73,10 +76,51 @@ namespace Lumina
                     Visible = true
                 };
 
-                _notifyIcon.DoubleClick += (s, e) => ShowAndActivate();
+                _scrollHook = new TrayScrollHook(_notifyIcon);
+                _scrollHook.Scrolled += delta =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        int step = delta > 0 ? 5 : -5;
+                        long newBright = (long)_viewModel.MasterBrightness + step;
+                        _viewModel.MasterBrightness = (uint)Math.Clamp(newBright, 0, 100);
+                        App.Log($"[MainWindow] Tray scroll -> MasterBrightness={_viewModel.MasterBrightness}%");
+                    });
+                };
+
+                _flyoutWindow = new TrayFlyoutWindow(_viewModel, _scrollHook, () => ShowAndActivate());
+
+                _clickTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime)
+                };
+                _clickTimer.Tick += (s, e) =>
+                {
+                    _clickTimer.Stop();
+                    Dispatcher.Invoke(() => _flyoutWindow?.ToggleVisibility());
+                };
+
+                _notifyIcon.MouseClick += (s, e) =>
+                {
+                    if (e.Button == MouseButtons.Left)
+                    {
+                        _clickTimer.Stop();
+                        _clickTimer.Start();
+                    }
+                };
+
+                _notifyIcon.DoubleClick += (s, e) =>
+                {
+                    _clickTimer.Stop();
+                    App.Log("[MainWindow] Double-click on tray icon -> ToggleTheme");
+                    Dispatcher.Invoke(() => _viewModel.ToggleTheme());
+                };
 
                 var contextMenu = new ContextMenuStrip();
-                var openItem = new ToolStripMenuItem("Open Lumina", null, (s, e) => ShowAndActivate())
+                var openFlyoutItem = new ToolStripMenuItem("Quick Controls", null, (s, e) => Dispatcher.Invoke(() => _flyoutWindow?.ShowNearTray()));
+                contextMenu.Items.Add(openFlyoutItem);
+
+                var openItem = new ToolStripMenuItem("Open Lumina Settings", null, (s, e) => ShowAndActivate())
                 {
                     Font = new Font(System.Drawing.SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold)
                 };
@@ -97,12 +141,20 @@ namespace Lumina
                 brightnessMenu.DropDownItems.Add("25%", null, (s, e) => Dispatcher.Invoke(() => _viewModel.MasterBrightness = 25));
                 contextMenu.Items.Add(brightnessMenu);
 
+                var lockItem = new ToolStripMenuItem("Lock & Sleep Displays", null, (s, e) =>
+                {
+                    Dispatcher.Invoke(() => _viewModel.StartLockAndTurnOff());
+                });
+                contextMenu.Items.Add(lockItem);
+
                 contextMenu.Items.Add(new ToolStripSeparator());
 
                 var exitItem = new ToolStripMenuItem("Exit Lumina", null, (s, e) =>
                 {
                     App.Log("[MainWindow] Exit clicked from tray context menu");
                     _isExplicitExit = true;
+                    _scrollHook?.Dispose();
+                    _flyoutWindow?.Close();
                     if (_notifyIcon != null)
                     {
                         _notifyIcon.Visible = false;
