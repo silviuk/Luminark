@@ -51,30 +51,28 @@ namespace Lumina
                 Log($"[CRITICAL DOMAIN ERROR] {args.ExceptionObject}");
             };
 
-            var currentProc = System.Diagnostics.Process.GetCurrentProcess();
-            var existingProcs = System.Diagnostics.Process.GetProcessesByName(currentProc.ProcessName)
-                .Where(p => p.Id != currentProc.Id)
-                .ToList();
-
-            if (existingProcs.Count > 0)
+            const string ActivateEventName = "Lumina_SingleInstance_Activate_Event";
+            if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var existingEvent))
             {
-                Log("Another instance of Lumina is already running. Broadcasting activation message.");
-                NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, WM_SHOWLUMINA, IntPtr.Zero, IntPtr.Zero);
-                foreach (var p in existingProcs)
-                {
-                    try
-                    {
-                        if (p.MainWindowHandle != IntPtr.Zero)
-                        {
-                            NativeMethods.ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
-                            NativeMethods.SetForegroundWindow(p.MainWindowHandle);
-                        }
-                    }
-                    catch { }
-                }
+                Log("Another instance of Lumina is already running. Signaling activation event.");
+                existingEvent.Set();
+                existingEvent.Dispose();
                 Shutdown();
                 return;
             }
+
+            var activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            ThreadPool.RegisterWaitForSingleObject(activateEvent, (state, timedOut) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    Log("[App] Received activation signal from another instance!");
+                    if (MainWindow is MainWindow mw)
+                    {
+                        mw.ShowAndActivate();
+                    }
+                });
+            }, null, -1, false);
 
             try
             {
@@ -126,6 +124,7 @@ namespace Lumina
                 }
                 else
                 {
+                    new System.Windows.Interop.WindowInteropHelper(mainWindow).EnsureHandle();
                     mainWindow.WindowState = WindowState.Minimized;
                     mainWindow.Hide();
                     Lumina.MainWindow.TrimMemory();

@@ -33,6 +33,14 @@ namespace Lumina
             InitializeComponent();
             App.Log("[MainWindow] InitializeComponent completed");
 
+            _viewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.IsLightTheme))
+                {
+                    Dispatcher.Invoke(() => UpdateDwmTheme(_viewModel.IsLightTheme));
+                }
+            };
+
             InitTrayIcon();
 
             Loaded += (s, e) =>
@@ -182,10 +190,29 @@ namespace Lumina
                 App.Log($"[MainWindow] OnSourceInitialized -> Handle={handle}");
                 var source = System.Windows.Interop.HwndSource.FromHwnd(handle);
                 source?.AddHook(WndProc);
+                UpdateDwmTheme(_viewModel.IsLightTheme);
             }
             catch (Exception ex)
             {
                 App.Log($"[MainWindow] HwndSource hook error: {ex.Message}");
+            }
+        }
+
+        public void UpdateDwmTheme(bool isLight)
+        {
+            try
+            {
+                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (handle != IntPtr.Zero)
+                {
+                    int darkMode = isLight ? 0 : 1;
+                    NativeMethods.DwmSetWindowAttribute(handle, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                    App.Log($"[MainWindow] Updated DWM theme: darkMode={darkMode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainWindow] DwmSetWindowAttribute error: {ex.Message}");
             }
         }
 

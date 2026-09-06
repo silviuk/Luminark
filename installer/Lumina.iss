@@ -1,8 +1,8 @@
-﻿; Lumina Inno Setup Installer Script
+; Lumina Inno Setup Installer Script
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Lumina"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Silviu K"
 #define MyAppURL "https://github.com/silviuk/Lumina"
 #define MyAppExeName "Lumina.exe"
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=Output
-OutputBaseFilename=Lumina-Setup-v1.0.0
+OutputBaseFilename=Lumina-Setup-v1.0.1
 SetupIconFile=..\assets\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

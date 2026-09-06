@@ -34,9 +34,24 @@ namespace Lumina
         public void ShowNearTray()
         {
             UpdatePosition();
+            UpdateDwmTheme();
             Show();
             Activate();
             Focus();
+        }
+
+        private void UpdateDwmTheme()
+        {
+            try
+            {
+                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (handle != IntPtr.Zero)
+                {
+                    int darkMode = _viewModel.IsLightTheme ? 0 : 1;
+                    NativeMethods.DwmSetWindowAttribute(handle, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                }
+            }
+            catch { }
         }
 
         public void ToggleVisibility()
