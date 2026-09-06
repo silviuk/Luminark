@@ -1,0 +1,19 @@
+﻿## Build and Output Folders
+bin/
+obj/
+publish/
+installer/Output/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio & Rider
+.vs/
+.idea/
+*.DotSettings.user
+
+## Diagnostics & Logs
+*.log
+*.dmp
+CrashDumps/

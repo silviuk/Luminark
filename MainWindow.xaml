@@ -1,0 +1,502 @@
+<Window x:Class="Lumina.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:local="clr-namespace:Lumina"
+        xmlns:vm="clr-namespace:Lumina.ViewModels"
+        mc:Ignorable="d"
+        Title="Lumina - Theme &amp; Display Manager"
+        Height="780" Width="1040"
+        MinHeight="620" MinWidth="840"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource ApplicationBackgroundBrush}"
+        Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+
+    <Window.Resources>
+        <Style x:Key="CardMarginStyle" TargetType="ui:Card">
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Modern Header Bar -->
+        <Border Grid.Row="0" Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="24,14">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="WeatherSunny24" FontSize="26" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Lumina" FontSize="19" FontWeight="Bold" />
+                        <TextBlock Text="Windows 11 Dynamic Theme &amp; Hardware Display Manager" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ui:Button Appearance="Secondary" 
+                               Icon="{ui:SymbolIcon Symbol=ArrowSync20}" 
+                               Content="Refresh Displays" 
+                               Click="OnRefreshDisplaysClicked" 
+                               Margin="0,0,8,0"/>
+                    <ui:Button Appearance="Primary" 
+                               Icon="{ui:SymbolIcon Symbol=WeatherMoon20}" 
+                               Content="Toggle Theme" 
+                               Click="OnQuickThemeToggleClicked"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Body -->
+        <TabControl Grid.Row="1" Margin="24,12,24,20">
+            
+            <!-- TAB 1: DASHBOARD -->
+            <TabItem Header="Dashboard">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,8,12,8">
+                    <StackPanel>
+
+                        <!-- System Theme Card -->
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="10" Background="{DynamicResource AccentFillColorDefaultBrush}" VerticalAlignment="Center" Margin="0,0,18,0">
+                                    <ui:SymbolIcon Symbol="WeatherSunny24" 
+                                                   FontSize="24" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding ThemeStatusText}" FontSize="18" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding ThemeSubText}" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <ui:Button Grid.Column="2" 
+                                           Appearance="Primary" 
+                                           Padding="18,10"
+                                           Content="Switch Theme" 
+                                           Click="OnThemeSwitchClicked">
+                                    <ui:Button.Style>
+                                        <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+                                                    <Setter Property="Content" Value="Switch to Dark Mode" />
+                                                    <Setter Property="Icon" Value="{ui:SymbolIcon Symbol=WeatherMoon24}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsLightTheme}" Value="False">
+                                                    <Setter Property="Content" Value="Switch to Light Mode" />
+                                                    <Setter Property="Icon" Value="{ui:SymbolIcon Symbol=WeatherSunny24}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                            </Grid>
+                        </ui:Card>
+
+                        <!-- Master Display Brightness Card -->
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="BrightnessHigh24" FontSize="20" Margin="0,0,10,0" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                        <StackPanel>
+                                            <TextBlock Text="Master Brightness (All Displays)" FontSize="16" FontWeight="SemiBold" />
+                                            <TextBlock Text="Synchronously adjust brightness across all connected monitors" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="1" Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="6" Padding="10,4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding MasterBrightnessText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    </Border>
+                                </Grid>
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ui:SymbolIcon Grid.Column="0" Symbol="WeatherSunny16" FontSize="16" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MasterBrightness, Mode=TwoWay}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" />
+                                    <ui:SymbolIcon Grid.Column="2" Symbol="BrightnessHigh24" FontSize="18" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- Brightness Preset Buttons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                    <TextBlock Text="Quick Presets:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,8,0" FontSize="12" />
+                                    <ui:Button Content="25%" Appearance="Secondary" Padding="12,6" Click="OnPresetClicked" Tag="25" Margin="0,0,6,0" />
+                                    <ui:Button Content="50%" Appearance="Secondary" Padding="12,6" Click="OnPresetClicked" Tag="50" Margin="0,0,6,0" />
+                                    <ui:Button Content="75%" Appearance="Secondary" Padding="12,6" Click="OnPresetClicked" Tag="75" Margin="0,0,6,0" />
+                                    <ui:Button Content="100%" Appearance="Secondary" Padding="12,6" Click="OnPresetClicked" Tag="100" />
+                                </StackPanel>
+                            </StackPanel>
+                        </ui:Card>
+
+                        <!-- Connected Monitors List Card -->
+                        <ui:Card Padding="20">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Connected Monitors" FontSize="16" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding ConnectedMonitorsCountText}" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:Button Grid.Column="1" Appearance="Secondary" Icon="{ui:SymbolIcon Symbol=ArrowSync20}" Content="Scan Displays" Click="OnRefreshDisplaysClicked" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <ItemsControl ItemsSource="{Binding Monitors}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <!-- Monitor Header -->
+                                                    <Grid Grid.Row="0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding FriendlyName}" FontSize="15" FontWeight="Medium" />
+                                                            <TextBlock Text="{Binding DisplayTechnologyText}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                                        </StackPanel>
+
+                                                        <Border Grid.Column="1" Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding BrightnessPercentageText}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <!-- Monitor Slider -->
+                                                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <ui:SymbolIcon Grid.Column="0" Symbol="WeatherSunny16" FontSize="14" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <Slider Grid.Column="1" 
+                                                                Minimum="{Binding MinBrightness}" 
+                                                                Maximum="{Binding MaxBrightness}" 
+                                                                Value="{Binding CurrentBrightness, Mode=TwoWay}" 
+                                                                IsSnapToTickEnabled="True" 
+                                                                TickFrequency="1" 
+                                                                VerticalAlignment="Center" />
+                                                        <ui:SymbolIcon Grid.Column="2" Symbol="BrightnessHigh20" FontSize="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ui:Card>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 2: SCHEDULE & AUTOMATION -->
+            <TabItem Header="Schedule &amp; Automation">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,8,12,8">
+                    <StackPanel>
+
+                        <!-- Windows Night Light Sync Card -->
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="WeatherMoon24" FontSize="20" Foreground="#FFA040" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Windows Night Light Synchronization" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="Synchronize dark/light theme transitions and display brightness with Windows 11 Night Light" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding SyncWithNightLight, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Status and Sunset/Sunrise info banner -->
+                                <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Padding="14,10" Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="8,3" Margin="0,0,12,0">
+                                                <TextBlock Text="{Binding NightLightStatusText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                            </Border>
+                                            <TextBlock Text="Windows Location Times: " FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Sunset " FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding SunsetText}" FontSize="12" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Text=" • Sunrise " FontSize="12" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding SunriseText}" FontSize="12" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <ui:Button Grid.Column="1" Appearance="Secondary" Padding="10,4" Content="Import to Schedule" 
+                                                   Icon="{ui:SymbolIcon Symbol=ArrowDownload20}" Click="OnImportSunsetSunriseClicked" ToolTip="Copy Windows Sunset and Sunrise times into Lumina's schedule" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Sync Mode Options -->
+                                <StackPanel Margin="4,0,0,0">
+                                    <TextBlock Text="Synchronization Behavior:" FontSize="13" FontWeight="Medium" Margin="0,0,0,8" />
+                                    <RadioButton Content="Follow Night Light Live State (Switch theme &amp; brightness whenever Night Light turns ON/OFF)" 
+                                                 IsChecked="{Binding IsSyncModeFollowState, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <RadioButton Content="Follow Windows Sunset &amp; Sunrise (Use the location-based sunset and sunrise times calculated by Windows)" 
+                                                 IsChecked="{Binding IsSyncModeFollowSunset, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <RadioButton Content="Drive Night Light (Automatically toggle Windows Night Light ON when switching to Dark Mode)" 
+                                                 IsChecked="{Binding IsSyncModeDriveNightLight, Mode=TwoWay}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </ui:Card>
+
+                        <!-- Theme Schedule Card -->
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Automatic Theme Schedule" FontSize="16" FontWeight="SemiBold" />
+                                        <TextBlock Text="Automatically switch between Light and Dark mode based on the local time of day" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoThemeEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Day Mode Start -->
+                                    <Border Grid.Column="0" Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Padding="16" Margin="0,0,8,0">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ui:SymbolIcon Symbol="WeatherSunny24" FontSize="20" Foreground="#E5A800" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Day Time (Light Mode)" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock Text="Switch to bright theme at:" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,6,0,10"/>
+
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ComboBox Width="70" ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:MainWindow}, Path=HoursList}" 
+                                                          SelectedItem="{Binding DayHour, Mode=TwoWay}" Margin="0,0,6,0" />
+                                                <TextBlock Text=":" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ComboBox Width="70" ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:MainWindow}, Path=MinutesList}" 
+                                                          SelectedItem="{Binding DayMinute, Mode=TwoWay}" Margin="0,0,10,0" />
+                                                <TextBlock Text="24h format" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Night Mode Start -->
+                                    <Border Grid.Column="1" Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Padding="16" Margin="8,0,0,0">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ui:SymbolIcon Symbol="WeatherMoon24" FontSize="20" Foreground="#8A7DF5" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Night Time (Dark Mode)" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock Text="Switch to dark theme at:" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,6,0,10"/>
+
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ComboBox Width="70" ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:MainWindow}, Path=HoursList}" 
+                                                          SelectedItem="{Binding NightHour, Mode=TwoWay}" Margin="0,0,6,0" />
+                                                <TextBlock Text=":" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ComboBox Width="70" ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:MainWindow}, Path=MinutesList}" 
+                                                          SelectedItem="{Binding NightMinute, Mode=TwoWay}" Margin="0,0,10,0" />
+                                                <TextBlock Text="24h format" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </ui:Card>
+
+                        <!-- Brightness Automation Card -->
+                        <ui:Card Padding="20">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Scheduled Hardware Brightness" FontSize="16" FontWeight="SemiBold" />
+                                        <TextBlock Text="Automatically adjust monitor brightness to match daytime and nighttime schedules" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoBrightnessEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Day Brightness -->
+                                    <Border Grid.Column="0" Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Padding="16" Margin="0,0,8,0">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Daytime Target Brightness" FontWeight="SemiBold" FontSize="13"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding DayBrightness, StringFormat='{}{0}%'}" FontWeight="Bold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                            </Grid>
+                                            <Slider Minimum="0" Maximum="100" Value="{Binding DayBrightness, Mode=TwoWay}" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,10,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Night Brightness -->
+                                    <Border Grid.Column="1" Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Padding="16" Margin="8,0,0,0">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Nighttime Target Brightness" FontWeight="SemiBold" FontSize="13"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding NightBrightness, StringFormat='{}{0}%'}" FontWeight="Bold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                            </Grid>
+                                            <Slider Minimum="0" Maximum="100" Value="{Binding NightBrightness, Mode=TwoWay}" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,10,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Link Brightness to Manual Theme Switches" FontWeight="Medium" FontSize="13" />
+                                        <TextBlock Text="When you manually toggle dark or light mode, also apply night or day brightness" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding LinkBrightnessToTheme, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                            </StackPanel>
+                        </ui:Card>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 3: SETTINGS -->
+            <TabItem Header="Settings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,8,12,8">
+                    <StackPanel>
+
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="System Integration" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+                                <!-- Start With Windows -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Start Lumina on Windows logon" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Launches the application automatically in the background when you sign in" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding StartWithWindows, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Start Minimized -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Start minimized to System Tray" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Do not display the main window on startup; stay silent in system tray" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding StartMinimized, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Minimize on Close -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Minimize to Tray on Close (X)" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Clicking the close button keeps Lumina running in the tray for schedule monitoring" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                            </StackPanel>
+                        </ui:Card>
+
+                        <!-- About Card -->
+                        <ui:Card Padding="20">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="10" Background="{DynamicResource AccentFillColorDefaultBrush}" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <ui:SymbolIcon Symbol="WindowDevTools24" FontSize="22" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Lumina v1.0.0" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="Native Windows 11 application built with .NET 8, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </ui:Card>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+    </Grid>
+</Window>
