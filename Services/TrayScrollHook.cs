@@ -201,6 +201,8 @@ namespace Lumina.Services
 
                     if (isOverTray)
                     {
+                        _lastHoverTime = DateTime.UtcNow;
+                        _isHoveringIcon = true;
                         short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
                         App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
                         Scrolled?.Invoke(delta);
