@@ -22,5 +22,6 @@ namespace Lumina.Models
 
         public bool IsMonitorsLinked { get; set; } = true;
         public int LockScreenDelaySeconds { get; set; } = 3; // 0 = Instant, 3s, 5s, 10s
+        public bool PreventSleep { get; set; } = false;
     }
 }

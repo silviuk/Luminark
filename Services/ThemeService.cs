@@ -32,6 +32,27 @@ namespace Lumina.Services
             return false;
         }
 
+        public bool IsSystemLightTheme()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath);
+                if (key != null)
+                {
+                    object? sysVal = key.GetValue("SystemUsesLightTheme");
+                    if (sysVal is int intVal)
+                    {
+                        return intVal == 1;
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback
+            }
+            return false;
+        }
+
         public void SetTheme(bool isLight)
         {
             try

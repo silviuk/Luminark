@@ -8,6 +8,7 @@
         xmlns:vm="clr-namespace:Lumina.ViewModels"
         mc:Ignorable="d"
         Title="Lumina - Theme &amp; Display Manager"
+        Icon="assets/app.ico"
         Height="780" Width="1040"
         MinHeight="620" MinWidth="840"
         WindowStartupLocation="CenterScreen"
@@ -519,6 +520,41 @@
                                     <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" VerticalAlignment="Center" />
                                 </Grid>
 
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Lock Delay -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Lock &amp; Screen Off countdown delay" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Countdown duration before workstation locks and displays power down" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1"
+                                              Width="160"
+                                              ItemsSource="{Binding LockDelayOptions}"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Seconds"
+                                              SelectedValue="{Binding LockScreenDelaySeconds, Mode=TwoWay}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Prevent Sleep -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Prevent computer sleep" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Keeps workstation and displays awake, preventing automatic idle sleep or screen turn-off" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding PreventSleep, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
                             </StackPanel>
                         </ui:Card>
 
@@ -535,7 +571,7 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Lumina v1.0.0" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="Lumina v1.0.2" FontSize="15" FontWeight="SemiBold" />
                                     <TextBlock Text="Native Windows 11 application built with .NET 8, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Grid>

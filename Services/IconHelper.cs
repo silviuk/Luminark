@@ -6,7 +6,22 @@ namespace Lumina.Services
 {
     public static class IconHelper
     {
-        public static Icon CreateAppIcon()
+        /// <summary>
+        /// Creates a modern, bold Windows 11 style rounded square (squircle) icon,
+        /// split vertically down the middle into half-dark and half-light.
+        /// 
+        /// In Light Mode:
+        ///   The right half is solid filled (indicating active bright/day on the right),
+        ///   left half is empty/dark with crisp border.
+        /// In Dark Mode:
+        ///   The left half is solid filled (indicating active night/dark on the left),
+        ///   right half is empty with crisp border.
+        ///
+        /// High contrast adaptation:
+        ///   On Dark Taskbar: outline and bright fill are pure white (#FFFFFF), dark side is transparent/void.
+        ///   On Light Taskbar: outline and dark fill are deep charcoal (#181818), light side is clean.
+        /// </summary>
+        public static Icon CreateDynamicTrayIcon(bool isLightMode, bool isTaskbarLight)
         {
             int size = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON);
             if (size < 16) size = 32;
@@ -19,72 +34,86 @@ namespace Lumina.Services
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 g.Clear(Color.Transparent);
 
-                float padding = Math.Max(1.0f, size * 0.05f);
-                float w = size - (2 * padding);
+                Color fgColor = isTaskbarLight
+                    ? Color.FromArgb(255, 20, 20, 20)      // Crisp charcoal on light taskbar
+                    : Color.FromArgb(255, 255, 255, 255);    // Pure white on dark taskbar
 
-                // Rounded base with dark midnight slate gradient
-                using var path = new GraphicsPath();
-                var rect = new RectangleF(padding, padding, w, w);
-                path.AddEllipse(rect);
+                // Use maximum size with a clean 2px margin for a big, prominent look
+                float padding = Math.Max(1.0f, size * 0.08f);
+                float boxSize = size - (2.0f * padding);
+                float x = padding;
+                float y = padding;
+                float cornerRadius = boxSize * 0.28f; // Smooth modern Windows 11 squircle curvature
+                float strokeWidth = Math.Max(1.5f, size * 0.09f);
 
-                using (var bgBrush = new LinearGradientBrush(rect,
-                    Color.FromArgb(255, 24, 26, 40),
-                    Color.FromArgb(255, 12, 14, 24),
-                    45.0f))
+                using var fullPath = CreateRoundedRectanglePath(x, y, boxSize, boxSize, cornerRadius);
+
+                // 1. Fill the active half inside the rounded square
+                // Clip rendering to the inside of the rounded square path
+                var origClip = g.Clip;
+                using (var pathRegion = new Region(fullPath))
                 {
-                    g.FillPath(bgBrush, path);
+                    g.Clip = pathRegion;
+
+                    float midX = x + (boxSize / 2.0f);
+                    RectangleF activeHalfRect;
+
+                    if (isLightMode)
+                    {
+                        // Light Mode: Right half is solidly illuminated
+                        activeHalfRect = new RectangleF(midX, y, (x + boxSize) - midX, boxSize);
+                    }
+                    else
+                    {
+                        // Dark Mode: Left half is solidly filled (or vice versa)
+                        activeHalfRect = new RectangleF(x, y, midX - x, boxSize);
+                    }
+
+                    using (var fillBrush = new SolidBrush(fgColor))
+                    {
+                        g.FillRectangle(fillBrush, activeHalfRect);
+                    }
+
+                    // Reset clip
+                    g.Clip = origClip;
                 }
 
-                using (var borderPen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1.0f, size * 0.04f)))
+                // 2. Draw the vertical dividing line down the exact center
+                using (var dividerPen = new Pen(fgColor, strokeWidth))
                 {
-                    g.DrawPath(borderPen, path);
+                    float midX = (float)Math.Round(x + (boxSize / 2.0f));
+                    g.DrawLine(dividerPen, midX, y, midX, y + boxSize);
                 }
 
-                // Radiant golden sun
-                float sunSize = w * 0.58f;
-                float sunX = padding + (w * 0.12f);
-                float sunY = padding + (w * 0.20f);
-                var sunRect = new RectangleF(sunX, sunY, sunSize, sunSize);
-
-                using (var sunBrush = new LinearGradientBrush(sunRect,
-                    Color.FromArgb(255, 255, 215, 60),
-                    Color.FromArgb(255, 255, 145, 0),
-                    90.0f))
+                // 3. Draw the crisp outer rounded square border
+                using (var borderPen = new Pen(fgColor, strokeWidth))
                 {
-                    g.FillEllipse(sunBrush, sunRect);
-                }
-
-                // Sleek crescent moon cutout
-                float moonSize = w * 0.52f;
-                float moonX = sunX + (sunSize * 0.32f);
-                float moonY = sunY - (sunSize * 0.08f);
-                var moonRect = new RectangleF(moonX, moonY, moonSize, moonSize);
-
-                using (var moonBrush = new LinearGradientBrush(moonRect,
-                    Color.FromArgb(255, 30, 32, 48),
-                    Color.FromArgb(255, 14, 16, 26),
-                    45.0f))
-                {
-                    g.FillEllipse(moonBrush, moonRect);
-                }
-
-                // Cyan luminous star accent
-                float accentSize = Math.Max(2.0f, w * 0.18f);
-                float accentX = padding + (w * 0.68f);
-                float accentY = padding + (w * 0.60f);
-                var accentRect = new RectangleF(accentX, accentY, accentSize, accentSize);
-
-                using (var accentBrush = new LinearGradientBrush(accentRect,
-                    Color.FromArgb(255, 96, 205, 255),
-                    Color.FromArgb(255, 0, 120, 215),
-                    45.0f))
-                {
-                    g.FillEllipse(accentBrush, accentRect);
+                    borderPen.Alignment = PenAlignment.Inset;
+                    g.DrawPath(borderPen, fullPath);
                 }
             }
 
             IntPtr hIcon = bmp.GetHicon();
             return Icon.FromHandle(hIcon);
+        }
+
+        public static Icon CreateAppIcon()
+        {
+            return CreateDynamicTrayIcon(isLightMode: false, isTaskbarLight: false);
+        }
+
+        private static GraphicsPath CreateRoundedRectanglePath(float x, float y, float width, float height, float radius)
+        {
+            var path = new GraphicsPath();
+            float diameter = radius * 2.0f;
+
+            path.AddArc(x, y, diameter, diameter, 180, 90);
+            path.AddArc(x + width - diameter, y, diameter, diameter, 270, 90);
+            path.AddArc(x + width - diameter, y + height - diameter, diameter, diameter, 0, 90);
+            path.AddArc(x, y + height - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+
+            return path;
         }
     }
 }

@@ -2,7 +2,7 @@
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Lumina"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Silviu K"
 #define MyAppURL "https://github.com/silviuk/Lumina"
 #define MyAppExeName "Lumina.exe"
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=Output
-OutputBaseFilename=Lumina-Setup-v1.0.1
+OutputBaseFilename=Lumina-Setup-v{#MyAppVersion}
 SetupIconFile=..\assets\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

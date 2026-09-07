@@ -121,6 +121,9 @@ namespace Lumina.Services
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool LockWorkStation();
 
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool DestroyIcon(IntPtr hIcon);
+
         [DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int nIndex);
 
@@ -174,5 +177,18 @@ namespace Lumina.Services
 
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        [Flags]
+        public enum EXECUTION_STATE : uint
+        {
+            ES_SYSTEM_REQUIRED   = 0x00000001,
+            ES_DISPLAY_REQUIRED  = 0x00000002,
+            ES_USER_PRESENT      = 0x00000004,
+            ES_AWAYMODE_REQUIRED = 0x00000040,
+            ES_CONTINUOUS        = 0x80000000
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE esFlags);
     }
 }

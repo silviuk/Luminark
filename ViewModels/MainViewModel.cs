@@ -51,6 +51,8 @@ namespace Lumina.ViewModels
             App.Log("MainViewModel: RefreshNightLightInfo started");
             RefreshNightLightInfo();
             App.Log("MainViewModel: RefreshNightLightInfo completed");
+
+            UpdateExecutionState();
         }
 
         public AppSettings Settings => _settings;
@@ -59,6 +61,7 @@ namespace Lumina.ViewModels
 
         public bool IsLightTheme => _themeService.IsLightTheme();
         public bool IsDarkMode => !IsLightTheme;
+        public bool IsSystemLightTheme => _themeService.IsSystemLightTheme();
 
         public string ThemeStatusText => IsLightTheme ? "Light Mode Active" : "Dark Mode Active";
         public string ThemeSubText => IsLightTheme
@@ -112,6 +115,7 @@ namespace Lumina.ViewModels
         {
             OnPropertyChanged(nameof(IsLightTheme));
             OnPropertyChanged(nameof(IsDarkMode));
+            OnPropertyChanged(nameof(IsSystemLightTheme));
             OnPropertyChanged(nameof(ThemeStatusText));
             OnPropertyChanged(nameof(ThemeSubText));
         }
@@ -512,6 +516,16 @@ namespace Lumina.ViewModels
             IsMonitorsLinked = !IsMonitorsLinked;
         }
 
+        public record LockDelayOption(string DisplayName, int Seconds);
+
+        public IReadOnlyList<LockDelayOption> LockDelayOptions { get; } = new List<LockDelayOption>
+        {
+            new("Instant (No delay)", 0),
+            new("3 seconds", 3),
+            new("5 seconds", 5),
+            new("10 seconds", 10)
+        };
+
         public int LockScreenDelaySeconds
         {
             get => _settings.LockScreenDelaySeconds;
@@ -528,6 +542,45 @@ namespace Lumina.ViewModels
         }
 
         public string LockDelayDisplayText => LockScreenDelaySeconds == 0 ? "Instant" : $"{LockScreenDelaySeconds}s delay";
+
+        public bool PreventSleep
+        {
+            get => _settings.PreventSleep;
+            set
+            {
+                if (_settings.PreventSleep != value)
+                {
+                    _settings.PreventSleep = value;
+                    OnPropertyChanged();
+                    UpdateExecutionState();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public void UpdateExecutionState()
+        {
+            try
+            {
+                if (_settings.PreventSleep)
+                {
+                    App.Log("[Power] Setting thread execution state: Prevent Sleep (System + Display)");
+                    NativeMethods.SetThreadExecutionState(
+                        NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
+                        NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
+                        NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+                }
+                else
+                {
+                    App.Log("[Power] Restoring normal thread execution state");
+                    NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Power] SetThreadExecutionState error: {ex.Message}");
+            }
+        }
 
         public string AutomationModeText
         {

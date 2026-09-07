@@ -35,9 +35,14 @@ namespace Lumina
 
             _viewModel.PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName == nameof(MainViewModel.IsLightTheme))
+                if (e.PropertyName == nameof(MainViewModel.IsLightTheme) ||
+                    e.PropertyName == nameof(MainViewModel.IsSystemLightTheme))
                 {
-                    Dispatcher.Invoke(() => UpdateDwmTheme(_viewModel.IsLightTheme));
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateDwmTheme(_viewModel.IsLightTheme);
+                        UpdateTrayIcon();
+                    });
                 }
             };
 
@@ -72,15 +77,18 @@ namespace Lumina
             };
         }
 
+        private Icon? _currentTrayIcon;
+
         private void InitTrayIcon()
         {
             try
             {
                 App.Log("[MainWindow] Creating System.Windows.Forms.NotifyIcon");
+                _currentTrayIcon = IconHelper.CreateDynamicTrayIcon(_viewModel.IsLightTheme, _viewModel.IsSystemLightTheme);
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
                     Text = "Lumina - Display & Theme Manager",
-                    Icon = IconHelper.CreateAppIcon(),
+                    Icon = _currentTrayIcon,
                     Visible = true
                 };
 
@@ -149,7 +157,7 @@ namespace Lumina
                 brightnessMenu.DropDownItems.Add("25%", null, (s, e) => Dispatcher.Invoke(() => _viewModel.MasterBrightness = 25));
                 contextMenu.Items.Add(brightnessMenu);
 
-                var lockItem = new ToolStripMenuItem("Lock & Sleep Displays", null, (s, e) =>
+                var lockItem = new ToolStripMenuItem("Lock & Screen Off", null, (s, e) =>
                 {
                     Dispatcher.Invoke(() => _viewModel.StartLockAndTurnOff());
                 });
@@ -213,6 +221,29 @@ namespace Lumina
             catch (Exception ex)
             {
                 App.Log($"[MainWindow] DwmSetWindowAttribute error: {ex.Message}");
+            }
+        }
+
+        public void UpdateTrayIcon()
+        {
+            try
+            {
+                if (_notifyIcon != null)
+                {
+                    var oldIcon = _currentTrayIcon;
+                    _currentTrayIcon = IconHelper.CreateDynamicTrayIcon(_viewModel.IsLightTheme, _viewModel.IsSystemLightTheme);
+                    _notifyIcon.Icon = _currentTrayIcon;
+                    if (oldIcon != null)
+                    {
+                        NativeMethods.DestroyIcon(oldIcon.Handle);
+                        oldIcon.Dispose();
+                    }
+                    App.Log($"[MainWindow] Updated tray icon: isLightMode={_viewModel.IsLightTheme}, isTaskbarLight={_viewModel.IsSystemLightTheme}");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainWindow] UpdateTrayIcon error: {ex.Message}");
             }
         }
 

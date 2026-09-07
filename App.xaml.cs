@@ -151,6 +151,7 @@ namespace Lumina
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             Log("Application_Exit triggered.");
+            try { NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS); } catch { }
             try { _scheduleService?.Stop(); } catch { }
             try { _scheduleService?.Dispose(); } catch { }
             try { _monitorService?.Dispose(); } catch { }
