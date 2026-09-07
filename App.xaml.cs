@@ -95,7 +95,10 @@ namespace Lumina
                 Log("Applying ApplicationThemeManager");
                 try
                 {
-                    ApplicationThemeManager.Apply(_themeService.IsLightTheme() ? ApplicationTheme.Light : ApplicationTheme.Dark);
+                    ApplicationThemeManager.Apply(
+                        _themeService.IsLightTheme() ? ApplicationTheme.Light : ApplicationTheme.Dark,
+                        Wpf.Ui.Controls.WindowBackdropType.None,
+                        updateAccent: true);
                 }
                 catch (Exception ex)
                 {

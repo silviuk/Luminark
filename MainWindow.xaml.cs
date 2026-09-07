@@ -217,6 +217,8 @@ namespace Lumina
                     NativeMethods.DwmSetWindowAttribute(handle, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
                     App.Log($"[MainWindow] Updated DWM theme: darkMode={darkMode}");
                 }
+                SetResourceReference(Window.BackgroundProperty, "ApplicationBackgroundBrush");
+                SetResourceReference(Window.ForegroundProperty, "TextFillColorPrimaryBrush");
             }
             catch (Exception ex)
             {

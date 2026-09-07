@@ -11,6 +11,33 @@ namespace Lumina.Services
 
         public event Action<bool>? ThemeChanged;
 
+        public ThemeService()
+        {
+            try
+            {
+                SystemEvents.UserPreferenceChanged += (s, e) =>
+                {
+                    if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color || e.Category == UserPreferenceCategory.Window)
+                    {
+                        bool isLight = IsLightTheme();
+                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            try
+                            {
+                                ApplicationThemeManager.Apply(
+                                    isLight ? ApplicationTheme.Light : ApplicationTheme.Dark,
+                                    Wpf.Ui.Controls.WindowBackdropType.None,
+                                    updateAccent: true);
+                            }
+                            catch { }
+                            ThemeChanged?.Invoke(isLight);
+                        });
+                    }
+                };
+            }
+            catch { }
+        }
+
         public bool IsLightTheme()
         {
             try
@@ -97,13 +124,13 @@ namespace Lumina.Services
                 {
                     if (System.Windows.Application.Current.Dispatcher.CheckAccess())
                     {
-                        try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark); } catch { }
+                        try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: true); } catch { }
                     }
                     else
                     {
                         System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
                         {
-                            try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark); } catch { }
+                            try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: true); } catch { }
                         });
                     }
                 }
