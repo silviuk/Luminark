@@ -78,17 +78,7 @@
         <Border Grid.Row="0" Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="24,14">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="28" Height="28" CornerRadius="7" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1.5" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Rectangle Grid.Column="0" Fill="#1E1E24" />
-                            <Rectangle Grid.Column="1" Fill="#FFFFFF" />
-                            <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="{DynamicResource CardStrokeColorDefaultBrush}" />
-                        </Grid>
-                    </Border>
+                    <Image Source="assets/logo.png" Width="28" Height="28" Margin="0,0,12,0" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Luminark" FontSize="19" FontWeight="Bold" />
                         <TextBlock Text="Windows 11 Dynamic Theme &amp; Hardware Display Manager" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -114,10 +104,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="10" Background="{DynamicResource AccentFillColorDefaultBrush}" VerticalAlignment="Center" Margin="0,0,18,0">
-                                    <ui:SymbolIcon Symbol="WeatherSunny24" 
-                                                   FontSize="24" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <Image Grid.Column="0" Source="assets/logo.png" Width="48" Height="48" VerticalAlignment="Center" Margin="0,0,18,0" RenderOptions.BitmapScalingMode="HighQuality" />
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding ThemeStatusText}" FontSize="18" FontWeight="SemiBold" />
@@ -553,17 +540,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1.5" ClipToBounds="True" VerticalAlignment="Center" Margin="0,0,16,0">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Rectangle Grid.Column="0" Fill="#1E1E24" />
-                                        <Rectangle Grid.Column="1" Fill="#FFFFFF" />
-                                        <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="{DynamicResource CardStrokeColorDefaultBrush}" />
-                                    </Grid>
-                                </Border>
+                                <Image Grid.Column="0" Source="assets/logo.png" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Luminark v1.0.0" FontSize="15" FontWeight="SemiBold" />

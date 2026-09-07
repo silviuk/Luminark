@@ -29,6 +29,14 @@ namespace Lumina
                     MainWindow.TrimMemory();
                 }
             };
+
+            PreviewMouseWheel += (s, e) =>
+            {
+                int step = e.Delta > 0 ? 5 : -5;
+                long newBright = (long)_viewModel.MasterBrightness + step;
+                _viewModel.MasterBrightness = (uint)Math.Clamp(newBright, 0, 100);
+                e.Handled = true;
+            };
         }
 
         public void ShowNearTray()

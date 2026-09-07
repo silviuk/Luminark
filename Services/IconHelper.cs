@@ -45,50 +45,37 @@ namespace Lumina.Services
                 float y = padding;
                 float cornerRadius = boxSize * 0.28f; // Smooth modern Windows 11 squircle curvature
                 float strokeWidth = Math.Max(1.5f, size * 0.09f);
+                float midX = x + (boxSize / 2.0f);
 
-                using var fullPath = CreateRoundedRectanglePath(x, y, boxSize, boxSize, cornerRadius);
-
-                // 1. Fill the active half inside the rounded square
-                // Clip rendering to the inside of the rounded square path
-                var origClip = g.Clip;
-                using (var pathRegion = new Region(fullPath))
+                // 1. Fill active half cleanly using smooth vector path (no 1-bit Region clipping)
+                if (isLightMode)
                 {
-                    g.Clip = pathRegion;
-
-                    float midX = x + (boxSize / 2.0f);
-                    RectangleF activeHalfRect;
-
-                    if (isLightMode)
-                    {
-                        // Light Mode: Right half is solidly illuminated
-                        activeHalfRect = new RectangleF(midX, y, (x + boxSize) - midX, boxSize);
-                    }
-                    else
-                    {
-                        // Dark Mode: Left half is solidly filled (or vice versa)
-                        activeHalfRect = new RectangleF(x, y, midX - x, boxSize);
-                    }
-
-                    using (var fillBrush = new SolidBrush(fgColor))
-                    {
-                        g.FillRectangle(fillBrush, activeHalfRect);
-                    }
-
-                    // Reset clip
-                    g.Clip = origClip;
+                    // Light Mode: Right half solidly illuminated
+                    using var rightPath = CreateRightHalfPath(x, y, boxSize, boxSize, cornerRadius, midX);
+                    using var fillBrush = new SolidBrush(fgColor);
+                    g.FillPath(fillBrush, rightPath);
+                }
+                else
+                {
+                    // Dark Mode: Left half solidly filled
+                    using var leftPath = CreateLeftHalfPath(x, y, boxSize, boxSize, cornerRadius, midX);
+                    using var fillBrush = new SolidBrush(fgColor);
+                    g.FillPath(fillBrush, leftPath);
                 }
 
                 // 2. Draw the vertical dividing line down the exact center
-                using (var dividerPen = new Pen(fgColor, strokeWidth))
+                using (var dividerPen = new Pen(fgColor, strokeWidth * 0.85f))
                 {
-                    float midX = (float)Math.Round(x + (boxSize / 2.0f));
                     g.DrawLine(dividerPen, midX, y, midX, y + boxSize);
                 }
 
                 // 3. Draw the crisp outer rounded square border
+                using (var fullPath = CreateRoundedRectanglePath(x, y, boxSize, boxSize, cornerRadius))
                 using (var borderPen = new Pen(fgColor, strokeWidth))
                 {
-                    borderPen.Alignment = PenAlignment.Inset;
+                    borderPen.StartCap = LineCap.Round;
+                    borderPen.EndCap = LineCap.Round;
+                    borderPen.LineJoin = LineJoin.Round;
                     g.DrawPath(borderPen, fullPath);
                 }
             }
@@ -100,6 +87,32 @@ namespace Lumina.Services
         public static Icon CreateAppIcon()
         {
             return CreateDynamicTrayIcon(isLightMode: false, isTaskbarLight: false);
+        }
+
+        private static GraphicsPath CreateLeftHalfPath(float x, float y, float w, float h, float r, float midX)
+        {
+            var path = new GraphicsPath();
+            float d = r * 2.0f;
+            path.AddLine(midX, y, x + r, y);
+            path.AddArc(x, y, d, d, 270, -90);
+            path.AddLine(x, y + r, x, y + h - r);
+            path.AddArc(x, y + h - d, d, d, 180, -90);
+            path.AddLine(x + r, y + h, midX, y + h);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static GraphicsPath CreateRightHalfPath(float x, float y, float w, float h, float r, float midX)
+        {
+            var path = new GraphicsPath();
+            float d = r * 2.0f;
+            path.AddLine(midX, y, x + w - r, y);
+            path.AddArc(x + w - d, y, d, d, 270, 90);
+            path.AddLine(x + w, y + r, x + w, y + h - r);
+            path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+            path.AddLine(x + w - r, y + h, midX, y + h);
+            path.CloseFigure();
+            return path;
         }
 
         private static GraphicsPath CreateRoundedRectanglePath(float x, float y, float width, float height, float radius)

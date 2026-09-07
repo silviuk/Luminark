@@ -87,7 +87,7 @@ namespace Lumina
                 _currentTrayIcon = IconHelper.CreateDynamicTrayIcon(_viewModel.IsLightTheme, _viewModel.IsSystemLightTheme);
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
-                    Text = "Luminark - Display & Theme Manager",
+                    Text = $"Luminark ({_viewModel.MasterBrightness}%) - Display & Theme Manager",
                     Icon = _currentTrayIcon,
                     Visible = true
                 };
@@ -100,6 +100,10 @@ namespace Lumina
                         int step = delta > 0 ? 5 : -5;
                         long newBright = (long)_viewModel.MasterBrightness + step;
                         _viewModel.MasterBrightness = (uint)Math.Clamp(newBright, 0, 100);
+                        if (_notifyIcon != null)
+                        {
+                            _notifyIcon.Text = $"Luminark ({_viewModel.MasterBrightness}%) - Display & Theme Manager";
+                        }
                         App.Log($"[MainWindow] Tray scroll -> MasterBrightness={_viewModel.MasterBrightness}%");
                     });
                 };

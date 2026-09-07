@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 
 namespace Lumina.Services
@@ -17,15 +18,25 @@ namespace Lumina.Services
 
         private System.Drawing.Point _lastHoverPos;
         private DateTime _lastHoverTime = DateTime.MinValue;
+        private bool _isHoveringIcon = false;
 
         public TrayScrollHook(NotifyIcon notifyIcon)
         {
             _notifyIcon = notifyIcon;
             _notifyIcon.MouseMove += (s, e) =>
             {
-                _lastHoverPos = System.Windows.Forms.Cursor.Position;
+                _lastHoverPos = Cursor.Position;
+                _isHoveringIcon = true;
                 _lastHoverTime = DateTime.UtcNow;
             };
+
+            _notifyIcon.MouseDown += (s, e) =>
+            {
+                _lastHoverPos = Cursor.Position;
+                _isHoveringIcon = true;
+                _lastHoverTime = DateTime.UtcNow;
+            };
+
             ExtractNotifyIconIdentifiers();
             StartHook();
         }
@@ -34,20 +45,30 @@ namespace Lumina.Services
         {
             try
             {
-                var windowField = typeof(NotifyIcon).GetField("window", BindingFlags.NonPublic | BindingFlags.Instance);
+                var windowField = typeof(NotifyIcon).GetField("_window", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?? typeof(NotifyIcon).GetField("window", BindingFlags.NonPublic | BindingFlags.Instance);
                 if (windowField?.GetValue(_notifyIcon) is NativeWindow nativeWindow)
                 {
                     _trayHwnd = nativeWindow.Handle;
                 }
 
-                var idField = typeof(NotifyIcon).GetField("id", BindingFlags.NonPublic | BindingFlags.Instance);
+                var idField = typeof(NotifyIcon).GetField("_id", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?? typeof(NotifyIcon).GetField("id", BindingFlags.NonPublic | BindingFlags.Instance);
                 if (idField != null)
                 {
                     object? val = idField.GetValue(_notifyIcon);
-                    if (val is int intId) _trayId = (uint)intId;
+                    if (val != null)
+                    {
+                        _trayId = Convert.ToUInt32(val);
+                    }
                 }
+
+                App.Log($"[TrayScrollHook] Extracted identifiers: hwnd=0x{_trayHwnd:X8}, id={_trayId}");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Log($"[TrayScrollHook] Failed to extract identifiers: {ex.Message}");
+            }
         }
 
         public bool TryGetTrayIconRect(out NativeMethods.Rect rect)
@@ -68,7 +89,7 @@ namespace Lumina.Services
                 };
 
                 int hr = NativeMethods.Shell_NotifyIconGetRect(ref nid, out rect);
-                return hr == 0; // S_OK
+                return hr == 0 && rect.Right > rect.Left && rect.Bottom > rect.Top;
             }
 
             return false;
@@ -84,40 +105,107 @@ namespace Lumina.Services
             App.Log($"[TrayScrollHook] Hook started. HookId={_hookId}");
         }
 
+        private static string GetWindowClassName(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return string.Empty;
+            var sb = new StringBuilder(256);
+            NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
+        private static bool IsTaskbarOrTrayWindow(NativeMethods.POINT pt)
+        {
+            try
+            {
+                IntPtr hwnd = NativeMethods.WindowFromPoint(pt);
+                if (hwnd == IntPtr.Zero) return false;
+
+                string className = GetWindowClassName(hwnd);
+                if (IsTrayClass(className)) return true;
+
+                IntPtr rootHwnd = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+                if (rootHwnd != IntPtr.Zero && rootHwnd != hwnd)
+                {
+                    string rootClass = GetWindowClassName(rootHwnd);
+                    if (IsTrayClass(rootClass)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool IsTrayClass(string className)
+        {
+            if (string.IsNullOrEmpty(className)) return false;
+            return className.Equals("Shell_TrayWnd", StringComparison.OrdinalIgnoreCase) ||
+                   className.Equals("Shell_SecondaryTrayWnd", StringComparison.OrdinalIgnoreCase) ||
+                   className.Equals("TrayNotifyWnd", StringComparison.OrdinalIgnoreCase) ||
+                   className.Equals("NotifyIconOverflowWindow", StringComparison.OrdinalIgnoreCase) ||
+                   className.Equals("SysPager", StringComparison.OrdinalIgnoreCase) ||
+                   className.Equals("ToolbarWindow32", StringComparison.OrdinalIgnoreCase) ||
+                   className.StartsWith("Windows.UI.Input.InputSite", StringComparison.OrdinalIgnoreCase);
+        }
+
         private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL)
+            if (nCode >= 0)
             {
+                int msg = (int)wParam;
                 var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-                bool isOverTray = false;
 
-                // 1. Try exact bounding box if available from Shell
-                if (TryGetTrayIconRect(out var rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
+                if (msg == NativeMethods.WM_MOUSEMOVE)
                 {
-                    if (hookStruct.pt.x >= rect.Left - 4 && hookStruct.pt.x <= rect.Right + 4 &&
-                        hookStruct.pt.y >= rect.Top - 4 && hookStruct.pt.y <= rect.Bottom + 4)
+                    if (_isHoveringIcon)
                     {
-                        isOverTray = true;
+                        int dx = Math.Abs(hookStruct.pt.x - _lastHoverPos.X);
+                        int dy = Math.Abs(hookStruct.pt.y - _lastHoverPos.Y);
+                        // If moved beyond tray icon bounding region (+ tolerance for high DPI), cursor left the icon
+                        if (dx > 40 || dy > 40)
+                        {
+                            _isHoveringIcon = false;
+                        }
                     }
                 }
-
-                // 2. Fallback to hover proximity tracking (cursor is within 32px of recent hover point)
-                if (!isOverTray && (DateTime.UtcNow - _lastHoverTime).TotalSeconds < 3.0)
+                else if (msg == NativeMethods.WM_MOUSEWHEEL)
                 {
-                    int dx = Math.Abs(hookStruct.pt.x - _lastHoverPos.X);
-                    int dy = Math.Abs(hookStruct.pt.y - _lastHoverPos.Y);
-                    if (dx <= 36 && dy <= 36)
+                    bool isOverTray = false;
+
+                    // 1. Exact bounding box from Shell if available
+                    if (TryGetTrayIconRect(out var rect))
                     {
-                        isOverTray = true;
+                        if (hookStruct.pt.x >= rect.Left - 8 && hookStruct.pt.x <= rect.Right + 8 &&
+                            hookStruct.pt.y >= rect.Top - 8 && hookStruct.pt.y <= rect.Bottom + 8)
+                        {
+                            isOverTray = true;
+                        }
                     }
-                }
 
-                if (isOverTray)
-                {
-                    short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
-                    App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
-                    Scrolled?.Invoke(delta);
-                    return (IntPtr)1; // Consume message so taskbar doesn't scroll
+                    // 2. Hover proximity tracking: cursor hasn't moved away from where hover occurred
+                    if (!isOverTray)
+                    {
+                        int dx = Math.Abs(hookStruct.pt.x - _lastHoverPos.X);
+                        int dy = Math.Abs(hookStruct.pt.y - _lastHoverPos.Y);
+
+                        if (_isHoveringIcon && dx <= 40 && dy <= 40)
+                        {
+                            isOverTray = true;
+                        }
+                        else if ((DateTime.UtcNow - _lastHoverTime).TotalSeconds < 10.0 && dx <= 48 && dy <= 48)
+                        {
+                            if (IsTaskbarOrTrayWindow(hookStruct.pt))
+                            {
+                                isOverTray = true;
+                            }
+                        }
+                    }
+
+                    if (isOverTray)
+                    {
+                        short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
+                        App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
+                        Scrolled?.Invoke(delta);
+                        return (IntPtr)1; // Consume so taskbar doesn't scroll
+                    }
                 }
             }
 

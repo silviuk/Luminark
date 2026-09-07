@@ -1,4 +1,4 @@
-﻿# Luminark 🌓
+# <img src="assets/logo.png" width="36" height="36" valign="middle" alt="Luminark Logo" /> Luminark
 
 > **Dynamic Windows 11 Theme, Night Light & Multi-Monitor Hardware Brightness Controller**
 
