@@ -520,12 +520,22 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="Prevent computer sleep" FontWeight="Medium" FontSize="14" />
                                         <TextBlock Text="Keeps workstation and displays awake, preventing automatic idle sleep or screen turn-off" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding PreventSleep, Mode=TwoWay}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1"
+                                              Width="110"
+                                              ItemsSource="{Binding SleepDurationOptions}"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Minutes"
+                                              SelectedValue="{Binding PreventSleepDurationMinutes, Mode=TwoWay}"
+                                              VerticalAlignment="Center"
+                                              ToolTip="Select duration to prevent computer sleep" />
+                                    <ui:ToggleSwitch Grid.Column="3" IsChecked="{Binding PreventSleep, Mode=TwoWay}" VerticalAlignment="Center" />
                                 </Grid>
 
                             </StackPanel>

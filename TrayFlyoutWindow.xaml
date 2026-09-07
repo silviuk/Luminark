@@ -141,15 +141,39 @@
                 </ui:Button>
             </Grid>
 
-            <!-- 3. Prevent Computer Sleep Checkbox -->
-            <CheckBox Grid.Row="3"
-                      Content="Prevent computer sleep"
-                      FontSize="12"
-                      Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                      IsChecked="{Binding PreventSleep, Mode=TwoWay}"
-                      Margin="2,0,0,10"
-                      VerticalAlignment="Center"
-                      ToolTip="Keeps system and display awake, preventing automatic idle sleep" />
+            <!-- 3. Prevent Computer Sleep with Duration Dropdown -->
+            <Grid Grid.Row="3" Margin="2,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox Content="Prevent sleep"
+                              FontSize="12"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                              IsChecked="{Binding PreventSleep, Mode=TwoWay}"
+                              VerticalAlignment="Center"
+                              ToolTip="Keeps system and display awake, preventing automatic idle sleep" />
+                    <TextBlock Text="{Binding PreventSleepRemainingText}"
+                               FontSize="10"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <ComboBox Grid.Column="1"
+                          Width="86"
+                          Height="26"
+                          Padding="6,1"
+                          FontSize="11"
+                          ItemsSource="{Binding SleepDurationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Minutes"
+                          SelectedValue="{Binding PreventSleepDurationMinutes, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          ToolTip="Select duration to prevent computer sleep" />
+            </Grid>
 
             <!-- 4. Master Brightness -->
             <Border Grid.Row="4"

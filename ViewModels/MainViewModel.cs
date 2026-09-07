@@ -543,6 +543,54 @@ namespace Lumina.ViewModels
 
         public string LockDelayDisplayText => LockScreenDelaySeconds == 0 ? "Instant" : $"{LockScreenDelaySeconds}s delay";
 
+        public record SleepDurationOption(string DisplayName, int Minutes);
+
+        public IReadOnlyList<SleepDurationOption> SleepDurationOptions { get; } = new List<SleepDurationOption>
+        {
+            new("30 min", 30),
+            new("1h", 60),
+            new("2h", 120),
+            new("4h", 240),
+            new("8h", 480),
+            new("forever", 0)
+        };
+
+        public int PreventSleepDurationMinutes
+        {
+            get => _settings.PreventSleepDurationMinutes;
+            set
+            {
+                if (_settings.PreventSleepDurationMinutes != value)
+                {
+                    _settings.PreventSleepDurationMinutes = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    if (PreventSleep)
+                    {
+                        UpdateExecutionState();
+                    }
+                }
+            }
+        }
+
+        private System.Windows.Threading.DispatcherTimer? _preventSleepTimer;
+        private DateTime? _preventSleepExpiry;
+
+        public string PreventSleepRemainingText
+        {
+            get
+            {
+                if (!PreventSleep || _preventSleepExpiry == null) return string.Empty;
+                var remaining = _preventSleepExpiry.Value - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero) return "(expiring...)";
+                if (remaining.TotalHours >= 1)
+                {
+                    return $"({Math.Floor(remaining.TotalHours)}h {remaining.Minutes}m left)";
+                }
+                return $"({Math.Max(1, (int)remaining.TotalMinutes)}m left)";
+            }
+        }
+
         public bool PreventSleep
         {
             get => _settings.PreventSleep;
@@ -564,22 +612,72 @@ namespace Lumina.ViewModels
             {
                 if (_settings.PreventSleep)
                 {
-                    App.Log("[Power] Setting thread execution state: Prevent Sleep (System + Display)");
+                    App.Log($"[Power] Setting thread execution state: Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m)");
                     NativeMethods.SetThreadExecutionState(
                         NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                         NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
                         NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+
+                    if (_settings.PreventSleepDurationMinutes > 0)
+                    {
+                        _preventSleepExpiry = DateTime.UtcNow.AddMinutes(_settings.PreventSleepDurationMinutes);
+                        StartPreventSleepTimer();
+                    }
+                    else
+                    {
+                        StopPreventSleepTimer();
+                        _preventSleepExpiry = null;
+                    }
                 }
                 else
                 {
+                    StopPreventSleepTimer();
+                    _preventSleepExpiry = null;
                     App.Log("[Power] Restoring normal thread execution state");
                     NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
                 }
+                OnPropertyChanged(nameof(PreventSleepRemainingText));
             }
             catch (Exception ex)
             {
                 App.Log($"[Power] SetThreadExecutionState error: {ex.Message}");
             }
+        }
+
+        private void StartPreventSleepTimer()
+        {
+            if (_preventSleepTimer == null)
+            {
+                _preventSleepTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _preventSleepTimer.Tick += (s, e) =>
+                {
+                    if (!PreventSleep || _preventSleepExpiry == null)
+                    {
+                        StopPreventSleepTimer();
+                        return;
+                    }
+
+                    if (DateTime.UtcNow >= _preventSleepExpiry.Value)
+                    {
+                        App.Log($"[Power] Prevent sleep duration ({_settings.PreventSleepDurationMinutes}m) elapsed. Restoring normal sleep.");
+                        StopPreventSleepTimer();
+                        PreventSleep = false;
+                    }
+                    else
+                    {
+                        OnPropertyChanged(nameof(PreventSleepRemainingText));
+                    }
+                };
+            }
+            _preventSleepTimer.Start();
+        }
+
+        private void StopPreventSleepTimer()
+        {
+            _preventSleepTimer?.Stop();
         }
 
         public string AutomationModeText
