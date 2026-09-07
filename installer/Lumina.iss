@@ -2,7 +2,7 @@
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Lumina"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Silviu K"
 #define MyAppURL "https://github.com/silviuk/Lumina"
 #define MyAppExeName "Lumina.exe"
@@ -41,7 +41,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startup"; Description: "Automatically start Lumina when Windows starts"; GroupDescription: "Automation:"
 
 [Files]
-Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
