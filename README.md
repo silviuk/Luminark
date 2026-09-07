@@ -1,75 +1,114 @@
-﻿# Lumina ☀️🌙
+﻿# Luminark 🌓
 
 > **Dynamic Windows 11 Theme, Night Light & Multi-Monitor Hardware Brightness Controller**
 
-Lumina is a native Windows 11 utility engineered to automatically harmonize your display environment. It synchronizes Windows system and app themes with day/night schedules or Windows Night Light, and provides seamless hardware-level multi-monitor brightness control via **DDC/CI** and **WMI**.
+[![Platform: Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/silviuk/Luminark)
+[![Runtime: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Release: v1.0.0](https://img.shields.io/badge/Release-v1.0.0-orange)](https://github.com/silviuk/Luminark/releases/latest)
 
-![Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11)
-![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Release](https://img.shields.io/badge/Release-v1.0.0-orange)
+**Luminark** is a native Windows 11 desktop application designed to unify and automate your display environment. It dynamically synchronizes Windows system and app themes with scheduled day/night times or Windows Night Light, provides direct hardware multi-monitor brightness control via **DDC/CI** and **WMI**, and offers intuitive system tray gestures for effortless control.
 
 ---
 
 ## ✨ Features
 
-- 🌓 **Automated Dark & Light Mode**: Switches Windows shell and applications automatically based on custom times, sunset/sunrise, or Windows Night Light live state.
-- 💡 **Multi-Monitor DDC/CI Control**: Hardware brightness control for external monitors via DDC/CI (I2C bus) and laptop internal panels via WMI.
-- 🎛️ **Master & Individual Sliders**: Adjust all screens simultaneously with a Master Slider or fine-tune individual monitors with quick presets (25%, 50%, 75%, 100%).
-- 🌅 **Windows Night Light Sync**:
-  - *Follow Live State*: Automatically switches to Dark Mode and dims brightness when Night Light engages.
-  - *Follow Sunset & Sunrise*: Syncs with Windows 11 location-calculated sunset and sunrise times.
-  - *Drive Night Light*: Controls Windows Night Light state directly.
-- ⚡ **Ultra-Low Resource Footprint**:
-  - **~7 MB RAM** working set when minimized to system tray.
-  - **0.0% CPU** at rest with event-driven scheduling.
-- 🎨 **Modern Windows 11 Fluent Design**: Built with WPF-UI, Windows 11 typography, rounded corners, snap layout support, and smooth sliders.
-- 🔔 **System Tray Integration**: Lives in the notification area with a quick context menu for immediate theme toggling and brightness adjustment.
+- 🌓 **Dynamic Theme Automation**:
+  - Automatically transitions Windows system and application themes between Light and Dark mode.
+  - Set custom daytime/nighttime transition hours or link directly with **Windows Night Light** live status.
+  - Automatically applies daytime and nighttime brightness targets alongside theme shifts.
+
+- 💡 **Hardware Multi-Monitor Brightness Control**:
+  - Direct hardware brightness control for external monitors via **DDC/CI** (I2C bus).
+  - Native internal display panel brightness control on laptops via **WMI**.
+  - Synchronized **Master Brightness** slider or independent per-display control.
+  - Quick brightness preset buttons (**25%**, **50%**, **75%**, **100%**).
+
+- 🖱️ **Taskbar Tray Scroll Wheel Control**:
+  - Hover over the Luminark tray icon and **scroll the mouse wheel** up or down to adjust master display brightness in real-time by **±5%** without opening any window.
+
+- ⚡ **Quick Controls Flyout**:
+  - Clean Windows 11 flyout positioned right above the system tray.
+  - Live status display showing the next scheduled theme transition time.
+  - Master and individual monitor brightness sliders.
+  - Quick toggle to link or unlink display brightness.
+
+- 🔒 **Lock & Screen Off**:
+  - Lock your workstation and instantly put connected monitors into low-power sleep with one click.
+  - Configurable countdown delay (*Instant*, *3s*, *5s*, *10s*) configured in the Settings tab, featuring a live countdown and cancel option in the flyout.
+
+- ☕ **Prevent Computer Sleep**:
+  - One-click toggle accessible from both the mini flyout and main settings to keep your workstation and displays awake, preventing automatic idle sleep during long renders, downloads, or presentations.
+
+- 🚀 **Lightweight & Efficient**:
+  - Ultra-low memory footprint (~15–25 MB working set when minimized to tray).
+  - **0.0% CPU** utilization at idle using event-driven Windows hooks and system notifications.
+
+---
+
+## 🎮 Shortcuts & Tray Gestures
+
+| Action | Result |
+| :--- | :--- |
+| **Scroll Wheel over Tray Icon** | Adjust Master Brightness by **±5%** |
+| **Double-Click Tray Icon** | Instantly toggle between **Dark Mode** and **Light Mode** |
+| **Single-Click Tray Icon** | Open or toggle the **Quick Controls Flyout** |
+| **Right-Click Tray Icon** | Open the **System Tray Context Menu** |
 
 ---
 
 ## 📥 Installation
 
-### Option 1: WinGet (Recommended)
-```powershell
-winget install silviuk.Lumina
-```
+### Option 1: Setup Installer (Recommended)
+1. Download **`Luminark-Setup-v1.0.0.exe`** from [**Latest GitHub Releases**](https://github.com/silviuk/Luminark/releases/latest).
+2. Run the installer (supports both standard user and administrative installation, plus silent `/VERYSILENT` deployments).
+3. Luminark will launch automatically and reside quietly in your Windows System Tray.
 
-### Option 2: Setup Installer (.exe)
-Download the latest `Lumina-Setup-v1.0.0.exe` from [GitHub Releases](https://github.com/silviuk/Lumina/releases/latest) and run the installer.
+### Option 2: Portable / Self-Contained
+1. Download or extract the compiled binaries.
+2. Run `Luminark.exe` directly without installation.
 
-### Option 3: Build from Source
+---
+
+## 🛠️ Building from Source
+
+### Prerequisites
+- Windows 10 (Build 19041+) or Windows 11
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Inno Setup 6 (optional, for packaging the installer)
+
+### Build Steps
 ```powershell
-git clone https://github.com/silviuk/Lumina.git
-cd Lumina
+# Clone the repository
+git clone https://github.com/silviuk/Luminark.git
+cd Luminark
+
+# Restore dependencies and build
 dotnet build -c Release
-dotnet run -c Release
+
+# Publish framework-dependent binaries
+dotnet publish Luminark.csproj -c Release -o installer\publish
+
+# (Optional) Compile Inno Setup installer
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\Luminark.iss
 ```
 
 ---
 
-## 🚀 Usage
-
-1. **Quick Switch**: Click the theme toggle button in the header or tray icon to immediately switch between Dark and Light mode.
-2. **Brightness**: Use the **Master Brightness** slider to adjust all displays together, or use individual sliders for each screen.
-3. **Schedule**: Enable **Automatic Theme Schedule** under the *Schedule & Automation* tab to set daily Day and Night transition times.
-4. **Night Light**: Enable **Sync with Windows Night Light** to link your theme and brightness transitions directly with Windows Night Light.
-5. **Autostart**: Toggle **Launch at Windows Startup** under *Settings* to run quietly in the system tray on boot.
-
----
-
-## 🛠️ Architecture & Tech Stack
+## 🏛️ Architecture & Interop
 
 - **Framework**: .NET 8 WPF with C# 12
-- **UI & Styling**: [WPF-UI](https://github.com/lepoco/wpfui) (Windows 11 Fluent Design)
-- **Hardware Interop**:
-  - `dxva2.dll` (`GetMonitorBrightness`, `SetMonitorBrightness`, `GetPhysicalMonitorsFromHMONITOR`)
-  - `user32.dll` (`EnumDisplayMonitors`, `SendMessageTimeout`, `RegisterWindowMessage`)
-  - `root\wmi` (`WmiMonitorBrightnessMethods`)
-- **Packaging**: Inno Setup with silent install support (`/VERYSILENT`)
+- **UI Design**: [WPF-UI](https://github.com/lepoco/wpfui) (Windows 11 Fluent Design System)
+- **Hardware & Windows APIs**:
+  - `dxva2.dll`: `GetMonitorBrightness`, `SetMonitorBrightness`, `GetPhysicalMonitorsFromHMONITOR`
+  - `user32.dll`: `WH_MOUSE_LL` low-level mouse hook, `LockWorkStation`, `SendMessageTimeout`, `PostMessage` (`SC_MONITORPOWER`)
+  - `kernel32.dll`: `SetThreadExecutionState` (`ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED`)
+  - `shell32.dll`: `Shell_NotifyIconGetRect` bounding box query
+  - `root\wmi`: `WmiMonitorBrightnessMethods` for internal laptop screens
+  - Windows Registry: `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+Distributed under the [MIT License](LICENSE). Copyright © 2026 Silviu K.

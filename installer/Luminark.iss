@@ -1,11 +1,11 @@
-; Lumina Inno Setup Installer Script
+; Luminark Inno Setup Installer Script
 ; Defines packaging parameters for Windows 10/11 x64
 
-#define MyAppName "Lumina"
-#define MyAppVersion "1.0.4"
+#define MyAppName "Luminark"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "Silviu K"
-#define MyAppURL "https://github.com/silviuk/Lumina"
-#define MyAppExeName "Lumina.exe"
+#define MyAppURL "https://github.com/silviuk/Luminark"
+#define MyAppExeName "Luminark.exe"
 
 [Setup]
 AppId={{D37E8420-56B0-4A9B-983C-C04C61F12345}
@@ -20,14 +20,14 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=Output
-OutputBaseFilename=Lumina-Setup-v{#MyAppVersion}
+OutputBaseFilename=Luminark-Setup-v{#MyAppVersion}
 SetupIconFile=..\assets\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
-CloseApplicationsFilter=*Lumina.exe*
+CloseApplicationsFilter=*Luminark.exe*
 RestartApplications=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -38,7 +38,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "Automatically start Lumina when Windows starts"; GroupDescription: "Automation:"
+Name: "startup"; Description: "Automatically start Luminark when Windows starts"; GroupDescription: "Automation:"
 
 [Files]
 Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

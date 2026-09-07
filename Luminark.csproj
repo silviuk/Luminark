@@ -7,13 +7,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationTitle>Lumina</ApplicationTitle>
+    <ApplicationTitle>Luminark</ApplicationTitle>
+    <AssemblyName>Luminark</AssemblyName>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <AssemblyVersion>1.0.4.0</AssemblyVersion>
-    <FileVersion>1.0.4.0</FileVersion>
-    <Version>1.0.4</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.0</Version>
     <Company>Silviu K</Company>
-    <Product>Lumina</Product>
+    <Product>Luminark</Product>
     <Description>Dynamic Windows 11 Theme, Night Light &amp; Multi-Monitor Brightness Controller</Description>
     <Copyright>Copyright © 2026</Copyright>
     <ServerGarbageCollection>false</ServerGarbageCollection>

@@ -7,7 +7,7 @@
         xmlns:local="clr-namespace:Lumina"
         xmlns:vm="clr-namespace:Lumina.ViewModels"
         mc:Ignorable="d"
-        Title="Lumina - Theme &amp; Display Manager"
+        Title="Luminark - Theme &amp; Display Manager"
         Height="780" Width="1040"
         MinHeight="620" MinWidth="840"
         WindowStartupLocation="CenterScreen"
@@ -78,23 +78,21 @@
         <Border Grid.Row="0" Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="24,14">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="WeatherSunny24" FontSize="26" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <Border Width="28" Height="28" CornerRadius="7" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1.5" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle Grid.Column="0" Fill="#1E1E24" />
+                            <Rectangle Grid.Column="1" Fill="#FFFFFF" />
+                            <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="{DynamicResource CardStrokeColorDefaultBrush}" />
+                        </Grid>
+                    </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Lumina" FontSize="19" FontWeight="Bold" />
+                        <TextBlock Text="Luminark" FontSize="19" FontWeight="Bold" />
                         <TextBlock Text="Windows 11 Dynamic Theme &amp; Hardware Display Manager" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <ui:Button Appearance="Secondary" 
-                               Icon="{ui:SymbolIcon Symbol=ArrowSync20}" 
-                               Content="Refresh Displays" 
-                               Click="OnRefreshDisplaysClicked" 
-                               Margin="0,0,8,0"/>
-                    <ui:Button Appearance="Primary" 
-                               Icon="{ui:SymbolIcon Symbol=WeatherMoon20}" 
-                               Content="Toggle Theme" 
-                               Click="OnQuickThemeToggleClicked"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -314,17 +312,6 @@
                                                    Icon="{ui:SymbolIcon Symbol=ArrowDownload20}" Click="OnImportSunsetSunriseClicked" ToolTip="Copy Windows Sunset and Sunrise times into Lumina's schedule" />
                                     </Grid>
                                 </Border>
-
-                                <!-- Sync Mode Options -->
-                                <StackPanel Margin="4,0,0,0">
-                                    <TextBlock Text="Synchronization Behavior:" FontSize="13" FontWeight="Medium" Margin="0,0,0,8" />
-                                    <RadioButton Content="Follow Night Light Live State (Switch theme &amp; brightness whenever Night Light turns ON/OFF)" 
-                                                 IsChecked="{Binding IsSyncModeFollowState, Mode=TwoWay}" Margin="0,0,0,6" />
-                                    <RadioButton Content="Follow Windows Sunset &amp; Sunrise (Use the location-based sunset and sunrise times calculated by Windows)" 
-                                                 IsChecked="{Binding IsSyncModeFollowSunset, Mode=TwoWay}" Margin="0,0,0,6" />
-                                    <RadioButton Content="Drive Night Light (Automatically toggle Windows Night Light ON when switching to Dark Mode)" 
-                                                 IsChecked="{Binding IsSyncModeDriveNightLight, Mode=TwoWay}" />
-                                </StackPanel>
                             </StackPanel>
                         </ui:Card>
 
@@ -483,7 +470,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Start Lumina on Windows logon" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Start Luminark on Windows logon" FontWeight="Medium" FontSize="14" />
                                         <TextBlock Text="Launches the application automatically in the background when you sign in" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
                                     <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding StartWithWindows, Mode=TwoWay}" VerticalAlignment="Center" />
@@ -514,7 +501,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="Minimize to Tray on Close (X)" FontWeight="Medium" FontSize="14" />
-                                        <TextBlock Text="Clicking the close button keeps Lumina running in the tray for schedule monitoring" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="Clicking the close button keeps Luminark running in the tray for schedule monitoring" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
                                     <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" VerticalAlignment="Center" />
                                 </Grid>
@@ -563,16 +550,36 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="10" Background="{DynamicResource AccentFillColorDefaultBrush}" VerticalAlignment="Center" Margin="0,0,16,0">
-                                    <ui:SymbolIcon Symbol="WindowDevTools24" FontSize="22" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1.5" ClipToBounds="True" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Rectangle Grid.Column="0" Fill="#1E1E24" />
+                                        <Rectangle Grid.Column="1" Fill="#FFFFFF" />
+                                        <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="{DynamicResource CardStrokeColorDefaultBrush}" />
+                                    </Grid>
                                 </Border>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Lumina v1.0.4" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="Luminark v1.0.0" FontSize="15" FontWeight="SemiBold" />
                                     <TextBlock Text="Native Windows 11 application built with .NET 8, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
+
+                                <ui:Button Grid.Column="2"
+                                           Appearance="Secondary"
+                                           Click="OnOpenGitHubClicked"
+                                           VerticalAlignment="Center"
+                                           Padding="12,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="Open24" FontSize="16" Margin="0,0,8,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                        <TextBlock Text="View on GitHub" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ui:Button>
                             </Grid>
                         </ui:Card>
 

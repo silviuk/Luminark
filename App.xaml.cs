@@ -19,7 +19,7 @@ namespace Lumina
 
         private static readonly string LogPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Lumina", "lumina.log");
+            "Luminark", "luminark.log");
 
         public static void Log(string message)
         {
@@ -32,7 +32,7 @@ namespace Lumina
             catch { }
         }
 
-        public static readonly int WM_SHOWLUMINA = NativeMethods.RegisterWindowMessage("LUMINA_ACTIVATE_WINDOW_MSG");
+        public static readonly int WM_SHOWLUMINARK = NativeMethods.RegisterWindowMessage("LUMINARK_ACTIVATE_WINDOW_MSG");
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
@@ -42,7 +42,7 @@ namespace Lumina
             DispatcherUnhandledException += (s, args) =>
             {
                 Log($"[DISPATCHER ERROR] {args.Exception}");
-                System.Windows.MessageBox.Show(args.Exception.Message, "Lumina Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(args.Exception.Message, "Luminark Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 args.Handled = false;
             };
 
@@ -51,10 +51,10 @@ namespace Lumina
                 Log($"[CRITICAL DOMAIN ERROR] {args.ExceptionObject}");
             };
 
-            const string ActivateEventName = "Lumina_SingleInstance_Activate_Event";
+            const string ActivateEventName = "Luminark_SingleInstance_Activate_Event";
             if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var existingEvent))
             {
-                Log("Another instance of Lumina is already running. Signaling activation event.");
+                Log("Another instance of Luminark is already running. Signaling activation event.");
                 existingEvent.Set();
                 existingEvent.Dispose();
                 Shutdown();

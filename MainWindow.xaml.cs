@@ -87,7 +87,7 @@ namespace Lumina
                 _currentTrayIcon = IconHelper.CreateDynamicTrayIcon(_viewModel.IsLightTheme, _viewModel.IsSystemLightTheme);
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
-                    Text = "Lumina - Display & Theme Manager",
+                    Text = "Luminark - Display & Theme Manager",
                     Icon = _currentTrayIcon,
                     Visible = true
                 };
@@ -136,7 +136,7 @@ namespace Lumina
                 var openFlyoutItem = new ToolStripMenuItem("Quick Controls", null, (s, e) => Dispatcher.Invoke(() => _flyoutWindow?.ShowNearTray()));
                 contextMenu.Items.Add(openFlyoutItem);
 
-                var openItem = new ToolStripMenuItem("Open Lumina Settings", null, (s, e) => ShowAndActivate())
+                var openItem = new ToolStripMenuItem("Open Luminark Settings", null, (s, e) => ShowAndActivate())
                 {
                     Font = new Font(System.Drawing.SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold)
                 };
@@ -165,7 +165,7 @@ namespace Lumina
 
                 contextMenu.Items.Add(new ToolStripSeparator());
 
-                var exitItem = new ToolStripMenuItem("Exit Lumina", null, (s, e) =>
+                var exitItem = new ToolStripMenuItem("Exit Luminark", null, (s, e) =>
                 {
                     App.Log("[MainWindow] Exit clicked from tray context menu");
                     _isExplicitExit = true;
@@ -251,9 +251,9 @@ namespace Lumina
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == App.WM_SHOWLUMINA)
+            if (msg == App.WM_SHOWLUMINARK)
             {
-                App.Log("[MainWindow] Received WM_SHOWLUMINA broadcast! Bringing window to foreground.");
+                App.Log("[MainWindow] Received WM_SHOWLUMINARK broadcast! Bringing window to foreground.");
                 ShowAndActivate();
                 handled = true;
             }
@@ -284,7 +284,7 @@ namespace Lumina
                 Hide();
                 try
                 {
-                    _notifyIcon?.ShowBalloonTip(3000, "Lumina", "Lumina is running in the system tray. Click this icon anytime to open.", ToolTipIcon.Info);
+                    _notifyIcon?.ShowBalloonTip(3000, "Luminark", "Luminark is running in the system tray. Click this icon anytime to open.", ToolTipIcon.Info);
                 }
                 catch { }
             }
@@ -325,6 +325,21 @@ namespace Lumina
         private void OnImportSunsetSunriseClicked(object sender, RoutedEventArgs e)
         {
             _viewModel.ImportSunsetSunriseTimes();
+        }
+
+        private void OnOpenGitHubClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/silviuk/Luminark")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainWindow] Failed to open GitHub: {ex.Message}");
+            }
         }
 
         public static void TrimMemory()

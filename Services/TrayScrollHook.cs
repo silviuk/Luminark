@@ -15,9 +15,17 @@ namespace Lumina.Services
 
         public event Action<int>? Scrolled;
 
+        private System.Drawing.Point _lastHoverPos;
+        private DateTime _lastHoverTime = DateTime.MinValue;
+
         public TrayScrollHook(NotifyIcon notifyIcon)
         {
             _notifyIcon = notifyIcon;
+            _notifyIcon.MouseMove += (s, e) =>
+            {
+                _lastHoverPos = System.Windows.Forms.Cursor.Position;
+                _lastHoverTime = DateTime.UtcNow;
+            };
             ExtractNotifyIconIdentifiers();
             StartHook();
         }
@@ -81,16 +89,35 @@ namespace Lumina.Services
             if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL)
             {
                 var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-                if (TryGetTrayIconRect(out var rect))
+                bool isOverTray = false;
+
+                // 1. Try exact bounding box if available from Shell
+                if (TryGetTrayIconRect(out var rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
                 {
-                    // Expand hit test by 2px margin for seamless scroll comfort
-                    if (hookStruct.pt.x >= rect.Left - 2 && hookStruct.pt.x <= rect.Right + 2 &&
-                        hookStruct.pt.y >= rect.Top - 2 && hookStruct.pt.y <= rect.Bottom + 2)
+                    if (hookStruct.pt.x >= rect.Left - 4 && hookStruct.pt.x <= rect.Right + 4 &&
+                        hookStruct.pt.y >= rect.Top - 4 && hookStruct.pt.y <= rect.Bottom + 4)
                     {
-                        short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
-                        Scrolled?.Invoke(delta);
-                        return (IntPtr)1; // Consume message so taskbar doesn't scroll
+                        isOverTray = true;
                     }
+                }
+
+                // 2. Fallback to hover proximity tracking (cursor is within 32px of recent hover point)
+                if (!isOverTray && (DateTime.UtcNow - _lastHoverTime).TotalSeconds < 3.0)
+                {
+                    int dx = Math.Abs(hookStruct.pt.x - _lastHoverPos.X);
+                    int dy = Math.Abs(hookStruct.pt.y - _lastHoverPos.Y);
+                    if (dx <= 36 && dy <= 36)
+                    {
+                        isOverTray = true;
+                    }
+                }
+
+                if (isOverTray)
+                {
+                    short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
+                    App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
+                    Scrolled?.Invoke(delta);
+                    return (IntPtr)1; // Consume message so taskbar doesn't scroll
                 }
             }
 

@@ -15,7 +15,7 @@ namespace Lumina.Services
         public SettingsService()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string folder = Path.Combine(appData, "Lumina");
+            string folder = Path.Combine(appData, "Luminark");
             Directory.CreateDirectory(folder);
             _settingsFilePath = Path.Combine(folder, "settings.json");
         }

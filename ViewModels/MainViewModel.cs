@@ -621,28 +621,21 @@ namespace Lumina.ViewModels
                 var now = DateTime.Now.TimeOfDay;
                 if (_settings.SyncWithNightLight)
                 {
-                    if (_settings.NightLightSyncMode == 0)
+                    var info = _nightLightService.GetNightLightInfo();
+                    if (info.Sunset.HasValue && info.Sunrise.HasValue)
                     {
-                        bool active = _nightLightService.IsNightLightActive();
-                        return active ? "Night Light active (Dark Mode)" : "Night Light inactive (Light Mode)";
-                    }
-                    if (_settings.NightLightSyncMode == 1)
-                    {
-                        var info = _nightLightService.GetNightLightInfo();
-                        var dayStart = info.Sunrise ?? _settings.DayTime;
-                        var nightStart = info.Sunset ?? _settings.NightTime;
+                        var dayStart = info.Sunrise.Value;
+                        var nightStart = info.Sunset.Value;
                         bool isDay = ScheduleService.IsDaytime(now, dayStart, nightStart);
                         return isDay
-                            ? $"Next: Dark at Sunset ({nightStart.Hours:D2}:{nightStart.Minutes:D2})"
-                            : $"Next: Light at Sunrise ({dayStart.Hours:D2}:{dayStart.Minutes:D2})";
+                            ? $"Next: Dark Mode at Sunset ({nightStart.Hours:D2}:{nightStart.Minutes:D2})"
+                            : $"Next: Light Mode at Sunrise ({dayStart.Hours:D2}:{dayStart.Minutes:D2})";
                     }
-                    if (_settings.NightLightSyncMode == 2)
-                    {
-                        bool isDay = ScheduleService.IsDaytime(now, _settings.DayTime, _settings.NightTime);
-                        return isDay
-                            ? $"Next: Dark Mode at {_settings.NightTime.Hours:D2}:{_settings.NightTime.Minutes:D2}"
-                            : $"Next: Light Mode at {_settings.DayTime.Hours:D2}:{_settings.DayTime.Minutes:D2}";
-                    }
+
+                    bool active = _nightLightService.IsNightLightActive();
+                    return active
+                        ? "Night Light active (Dark Mode on)"
+                        : "Night Light inactive (Light Mode on)";
                 }
 
                 if (_settings.AutoThemeEnabled)
