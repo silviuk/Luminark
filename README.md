@@ -5,7 +5,7 @@
 [![Platform: Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/silviuk/Luminark)
 [![Runtime: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v1.0.0](https://img.shields.io/badge/Release-v1.0.0-orange)](https://github.com/silviuk/Luminark/releases/latest)
+[![Release: v1.0.1](https://img.shields.io/badge/Release-v1.0.1-orange)](https://github.com/silviuk/Luminark/releases/latest)
 
 **Luminark** is a native Windows 11 desktop application designed to unify and automate your display environment. It dynamically synchronizes Windows system and app themes with scheduled day/night times or Windows Night Light, provides direct hardware multi-monitor brightness control via **DDC/CI** and **WMI**, and offers intuitive system tray gestures for effortless control.
 
@@ -60,7 +60,7 @@
 ## 📥 Installation
 
 ### Option 1: Setup Installer (Recommended)
-1. Download **`Luminark-Setup-v1.0.0.exe`** from [**Latest GitHub Releases**](https://github.com/silviuk/Luminark/releases/latest).
+1. Download **`Luminark-Setup-v1.0.1.exe`** from [**Latest GitHub Releases**](https://github.com/silviuk/Luminark/releases/latest).
 2. Run the installer (supports both standard user and administrative installation, plus silent `/VERYSILENT` deployments).
 3. Luminark will launch automatically and reside quietly in your Windows System Tray.
 

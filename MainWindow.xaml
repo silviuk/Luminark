@@ -299,6 +299,19 @@
                                                    Icon="{ui:SymbolIcon Symbol=ArrowDownload20}" Click="OnImportSunsetSunriseClicked" ToolTip="Copy Windows Sunset and Sunrise times into Lumina's schedule" />
                                     </Grid>
                                 </Border>
+
+                                <!-- Link Theme Change with Night Light Mode -->
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Link Dark/Light Mode with Night Light" FontWeight="Medium" FontSize="13" />
+                                        <TextBlock Text="When you toggle themes: Light Mode turns Night Light off, Dark Mode turns Night Light on" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding LinkThemeToNightLight, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
                             </StackPanel>
                         </ui:Card>
 

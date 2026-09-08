@@ -14,6 +14,7 @@ namespace Lumina.ViewModels
         private readonly ThemeService _themeService;
         private readonly MonitorService _monitorService;
         private readonly NightLightService _nightLightService;
+        private readonly ScreenTintService _screenTintService;
         private readonly SettingsService _settingsService;
         private readonly ScheduleService _scheduleService;
 
@@ -27,12 +28,14 @@ namespace Lumina.ViewModels
             ThemeService themeService,
             MonitorService monitorService,
             NightLightService nightLightService,
+            ScreenTintService screenTintService,
             SettingsService settingsService,
             ScheduleService scheduleService)
         {
             _themeService = themeService;
             _monitorService = monitorService;
             _nightLightService = nightLightService;
+            _screenTintService = screenTintService;
             _settingsService = settingsService;
             _scheduleService = scheduleService;
 
@@ -63,6 +66,10 @@ namespace Lumina.ViewModels
         public bool IsDarkMode => !IsLightTheme;
         public bool IsSystemLightTheme => _themeService.IsSystemLightTheme();
 
+        // In Dark mode -> show Sun icon (to switch to Light mode). In Light mode -> show Moon icon (to switch to Dark mode).
+        public Wpf.Ui.Controls.SymbolRegular ThemeToggleSymbol => IsLightTheme ? Wpf.Ui.Controls.SymbolRegular.WeatherMoon24 : Wpf.Ui.Controls.SymbolRegular.WeatherSunny24;
+        public string ThemeToggleToolTip => IsLightTheme ? "Switch to Dark Mode" : "Switch to Light Mode";
+
         public string ThemeStatusText => IsLightTheme ? "Light Mode Active" : "Dark Mode Active";
         public string ThemeSubText => IsLightTheme
             ? "Windows shell and supported applications are using bright theme."
@@ -71,15 +78,7 @@ namespace Lumina.ViewModels
         public void ToggleTheme()
         {
             bool newIsLight = !IsLightTheme;
-            _themeService.SetTheme(newIsLight);
-
-            if (_settings.LinkBrightnessToTheme && Monitors.Count > 0)
-            {
-                uint targetBrightness = newIsLight ? _settings.DayBrightness : _settings.NightBrightness;
-                MasterBrightness = targetBrightness;
-            }
-
-            UpdateThemeProperties();
+            SetTheme(newIsLight);
         }
 
         public void SetTheme(bool isLight)
@@ -90,6 +89,14 @@ namespace Lumina.ViewModels
                 uint targetBrightness = isLight ? _settings.DayBrightness : _settings.NightBrightness;
                 MasterBrightness = targetBrightness;
             }
+
+            // If LinkThemeToNightLight is enabled: Light mode disables Night Light, Dark mode enables Night Light
+            if (_settings.LinkThemeToNightLight && _nightLightService.IsSupported())
+            {
+                _nightLightService.SetNightLightState(!isLight);
+                RefreshNightLightInfo();
+            }
+
             UpdateThemeProperties();
         }
 
@@ -116,6 +123,8 @@ namespace Lumina.ViewModels
             OnPropertyChanged(nameof(IsLightTheme));
             OnPropertyChanged(nameof(IsDarkMode));
             OnPropertyChanged(nameof(IsSystemLightTheme));
+            OnPropertyChanged(nameof(ThemeToggleSymbol));
+            OnPropertyChanged(nameof(ThemeToggleToolTip));
             OnPropertyChanged(nameof(ThemeStatusText));
             OnPropertyChanged(nameof(ThemeSubText));
         }
@@ -447,6 +456,35 @@ namespace Lumina.ViewModels
         {
             get => NightLightSyncMode == 2;
             set { if (value) NightLightSyncMode = 2; }
+        }
+
+        public bool LinkThemeToNightLight
+        {
+            get => _settings.LinkThemeToNightLight;
+            set
+            {
+                if (_settings.LinkThemeToNightLight != value)
+                {
+                    _settings.LinkThemeToNightLight = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public bool IsScreenTintSupported => _screenTintService.IsSupported();
+
+        public bool IsScreenTintActive
+        {
+            get => _screenTintService.IsScreenTintActive();
+            set
+            {
+                if (_screenTintService.IsScreenTintActive() != value)
+                {
+                    _screenTintService.SetScreenTint(value);
+                    OnPropertyChanged();
+                }
+            }
         }
 
         public string NightLightStatusText

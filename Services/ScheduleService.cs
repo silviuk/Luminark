@@ -35,8 +35,15 @@ namespace Lumina.Services
             };
             _timer.Tick += OnTimerTick;
 
+            _nightLightService.StateChanged += OnNightLightStateChanged;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
             SystemEvents.TimeChanged += OnTimeChanged;
+        }
+
+        private void OnNightLightStateChanged(bool isActive)
+        {
+            App.Log($"[ScheduleService] NightLightService.StateChanged received (isActive={isActive}) -> Evaluating immediately");
+            EvaluateSchedule(force: true);
         }
 
         public void SetActiveMonitorsProvider(Func<IEnumerable<MonitorInfo>> provider)
@@ -174,6 +181,7 @@ namespace Lumina.Services
         public void Dispose()
         {
             _timer.Stop();
+            _nightLightService.StateChanged -= OnNightLightStateChanged;
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             SystemEvents.TimeChanged -= OnTimeChanged;
         }

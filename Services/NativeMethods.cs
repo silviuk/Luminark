@@ -5,6 +5,19 @@ namespace Lumina.Services
 {
     internal static class NativeMethods
     {
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern int RegNotifyChangeKeyValue(
+            IntPtr hKey,
+            bool bWatchSubtree,
+            uint dwNotifyFilter,
+            IntPtr hEvent,
+            bool fAsynchronous);
+
+        public const uint REG_NOTIFY_CHANGE_NAME = 1;
+        public const uint REG_NOTIFY_CHANGE_ATTRIBUTES = 2;
+        public const uint REG_NOTIFY_CHANGE_LAST_SET = 4;
+        public const uint REG_NOTIFY_CHANGE_SECURITY = 8;
+
         public const int HWND_BROADCAST = 0xffff;
         public const int WM_SETTINGCHANGE = 0x001A;
         public const uint SMTO_ABORTIFHUNG = 0x0002;

@@ -47,31 +47,35 @@ namespace Lumina.Services
                 float strokeWidth = Math.Max(1.5f, size * 0.09f);
                 float midX = x + (boxSize / 2.0f);
 
-                // 1. Fill active half cleanly using smooth vector path (no 1-bit Region clipping)
-                if (isLightMode)
+                // Match the official Luminark logo: Left is dark/black (#1E1E24), Right is bright/white (#FFFFFF)
+                Color darkFill = Color.FromArgb(255, 32, 32, 38);
+                Color lightFill = Color.FromArgb(255, 255, 255, 255);
+                Color outlineColor = isTaskbarLight ? Color.FromArgb(255, 40, 40, 45) : Color.FromArgb(255, 240, 240, 240);
+
+                // 1. Fill Left half with Dark / Black
+                using (var leftPath = CreateLeftHalfPath(x, y, boxSize, boxSize, cornerRadius, midX))
+                using (var darkBrush = new SolidBrush(darkFill))
                 {
-                    // Light Mode: Right half solidly illuminated
-                    using var rightPath = CreateRightHalfPath(x, y, boxSize, boxSize, cornerRadius, midX);
-                    using var fillBrush = new SolidBrush(fgColor);
-                    g.FillPath(fillBrush, rightPath);
-                }
-                else
-                {
-                    // Dark Mode: Left half solidly filled
-                    using var leftPath = CreateLeftHalfPath(x, y, boxSize, boxSize, cornerRadius, midX);
-                    using var fillBrush = new SolidBrush(fgColor);
-                    g.FillPath(fillBrush, leftPath);
+                    g.FillPath(darkBrush, leftPath);
                 }
 
-                // 2. Draw the vertical dividing line down the exact center
-                using (var dividerPen = new Pen(fgColor, strokeWidth * 0.85f))
+                // 2. Fill Right half with Light / White
+                using (var rightPath = CreateRightHalfPath(x, y, boxSize, boxSize, cornerRadius, midX))
+                using (var lightBrush = new SolidBrush(lightFill))
+                {
+                    g.FillPath(lightBrush, rightPath);
+                }
+
+                // 3. Draw subtle active indicator glow or divider
+                Color dividerColor = Color.FromArgb(200, 80, 80, 90);
+                using (var dividerPen = new Pen(dividerColor, strokeWidth * 0.75f))
                 {
                     g.DrawLine(dividerPen, midX, y, midX, y + boxSize);
                 }
 
-                // 3. Draw the crisp outer rounded square border
+                // 4. Draw crisp outer rounded square border
                 using (var fullPath = CreateRoundedRectanglePath(x, y, boxSize, boxSize, cornerRadius))
-                using (var borderPen = new Pen(fgColor, strokeWidth))
+                using (var borderPen = new Pen(outlineColor, strokeWidth))
                 {
                     borderPen.StartCap = LineCap.Round;
                     borderPen.EndCap = LineCap.Round;
