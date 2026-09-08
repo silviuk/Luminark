@@ -508,6 +508,27 @@
 
                                 <Separator Margin="0,12,0,12" />
 
+                                <!-- Tray Double Click Action -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Tray icon double-click action" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Choose what happens when you double-click the Luminark system tray icon" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1"
+                                              Width="210"
+                                              ItemsSource="{Binding TrayDoubleClickOptions}"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding TrayDoubleClickAction, Mode=TwoWay}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
                                 <!-- Lock Delay -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -566,7 +587,7 @@
                                 <Image Grid.Column="0" Source="assets/logo.png" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Luminark v1.0.0" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding AppVersionText}" FontSize="15" FontWeight="SemiBold" />
                                     <TextBlock Text="Native Windows 11 application built with .NET 8, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
 

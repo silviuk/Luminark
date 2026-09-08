@@ -586,6 +586,39 @@ namespace Lumina.ViewModels
             }
         }
 
+        public record TrayDoubleClickOption(string DisplayName, int Value);
+
+        public IReadOnlyList<TrayDoubleClickOption> TrayDoubleClickOptions { get; } = new List<TrayDoubleClickOption>
+        {
+            new("Toggle Dark / Light Mode", 0),
+            new("Open Main Window", 1)
+        };
+
+        public int TrayDoubleClickAction
+        {
+            get => _settings.TrayDoubleClickAction;
+            set
+            {
+                if (_settings.TrayDoubleClickAction != value)
+                {
+                    _settings.TrayDoubleClickAction = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public string AppVersionText
+        {
+            get
+            {
+                var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                return version != null
+                    ? $"Luminark v{version.Major}.{version.Minor}.{version.Build}"
+                    : "Luminark";
+            }
+        }
+
         private System.Windows.Threading.DispatcherTimer? _preventSleepTimer;
         private DateTime? _preventSleepExpiry;
 

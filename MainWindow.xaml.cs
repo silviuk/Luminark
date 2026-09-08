@@ -132,8 +132,16 @@ namespace Lumina
                 _notifyIcon.DoubleClick += (s, e) =>
                 {
                     _clickTimer.Stop();
-                    App.Log("[MainWindow] Double-click on tray icon -> ToggleTheme");
-                    Dispatcher.Invoke(() => _viewModel.ToggleTheme());
+                    if (_viewModel.TrayDoubleClickAction == 1)
+                    {
+                        App.Log("[MainWindow] Double-click on tray icon -> ShowAndActivate");
+                        Dispatcher.Invoke(() => ShowAndActivate());
+                    }
+                    else
+                    {
+                        App.Log("[MainWindow] Double-click on tray icon -> ToggleTheme");
+                        Dispatcher.Invoke(() => _viewModel.ToggleTheme());
+                    }
                 };
 
                 var contextMenu = new ContextMenuStrip();
