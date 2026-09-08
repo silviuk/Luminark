@@ -39,6 +39,16 @@ namespace Lumina
             Log("=== Application Starting ===");
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            SessionEnding += (s, args) =>
+            {
+                Log($"[App] SessionEnding received (Reason={args.ReasonSessionEnding}) -> shutting down");
+                if (MainWindow is MainWindow mw)
+                {
+                    mw.PrepareExplicitExit();
+                }
+                Shutdown();
+            };
+
             DispatcherUnhandledException += (s, args) =>
             {
                 Log($"[DISPATCHER ERROR] {args.Exception}");

@@ -19,6 +19,13 @@ namespace Lumina
         private TrayScrollHook? _scrollHook;
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
         private bool _isExplicitExit = false;
+        private bool _isSysCommandClose = false;
+
+        private const int WM_CLOSE = 0x0010;
+        private const int WM_QUERYENDSESSION = 0x0011;
+        private const int WM_ENDSESSION = 0x0016;
+        private const int WM_SYSCOMMAND = 0x0112;
+        private const int SC_CLOSE = 0xF060;
 
         public List<int> HoursList { get; } = Enumerable.Range(0, 24).ToList();
         public List<int> MinutesList { get; } = Enumerable.Range(0, 60).ToList();
@@ -180,14 +187,7 @@ namespace Lumina
                 var exitItem = new ToolStripMenuItem("Exit Luminark", null, (s, e) =>
                 {
                     App.Log("[MainWindow] Exit clicked from tray context menu");
-                    _isExplicitExit = true;
-                    _scrollHook?.Dispose();
-                    _flyoutWindow?.Close();
-                    if (_notifyIcon != null)
-                    {
-                        _notifyIcon.Visible = false;
-                        _notifyIcon.Dispose();
-                    }
+                    PrepareExplicitExit();
                     System.Windows.Application.Current.Shutdown();
                 });
                 contextMenu.Items.Add(exitItem);
@@ -261,6 +261,26 @@ namespace Lumina
             }
         }
 
+        public void PrepareExplicitExit()
+        {
+            _isExplicitExit = true;
+            try
+            {
+                _scrollHook?.Dispose();
+                _flyoutWindow?.Close();
+                if (_notifyIcon != null)
+                {
+                    _notifyIcon.Visible = false;
+                    _notifyIcon.Dispose();
+                    _notifyIcon = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainWindow] PrepareExplicitExit warning: {ex.Message}");
+            }
+        }
+
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == App.WM_SHOWLUMINARK)
@@ -268,6 +288,40 @@ namespace Lumina
                 App.Log("[MainWindow] Received WM_SHOWLUMINARK broadcast! Bringing window to foreground.");
                 ShowAndActivate();
                 handled = true;
+            }
+            else if (msg == WM_SYSCOMMAND && ((int)wParam & 0xFFF0) == SC_CLOSE)
+            {
+                _isSysCommandClose = true;
+            }
+            else if (msg == WM_QUERYENDSESSION)
+            {
+                App.Log($"[MainWindow] WM_QUERYENDSESSION received (lParam={lParam}) -> allowing shutdown");
+                PrepareExplicitExit();
+                handled = true;
+                return (IntPtr)1; // Return TRUE to indicate willingness to shut down
+            }
+            else if (msg == WM_ENDSESSION)
+            {
+                App.Log($"[MainWindow] WM_ENDSESSION received (wParam={wParam})");
+                PrepareExplicitExit();
+                if (wParam != IntPtr.Zero)
+                {
+                    System.Windows.Application.Current.Shutdown();
+                }
+                handled = true;
+                return IntPtr.Zero;
+            }
+            else if (msg == WM_CLOSE)
+            {
+                App.Log($"[MainWindow] WM_CLOSE received (isSysCommandClose={_isSysCommandClose}, explicitExit={_isExplicitExit})");
+                if (!_isSysCommandClose && !_isExplicitExit)
+                {
+                    App.Log("[MainWindow] External/RestartManager WM_CLOSE detected -> triggering explicit exit");
+                    PrepareExplicitExit();
+                    Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+                    handled = true;
+                    return IntPtr.Zero;
+                }
             }
             return IntPtr.Zero;
         }
@@ -289,10 +343,11 @@ namespace Lumina
 
         protected override void OnClosing(CancelEventArgs e)
         {
-            App.Log($"[MainWindow] OnClosing called (explicitExit={_isExplicitExit}, minimizeToTray={_viewModel.MinimizeToTray})");
-            if (!_isExplicitExit && _viewModel.MinimizeToTray)
+            App.Log($"[MainWindow] OnClosing called (explicitExit={_isExplicitExit}, isSysCommandClose={_isSysCommandClose}, minimizeToTray={_viewModel.MinimizeToTray})");
+            if (!_isExplicitExit && _isSysCommandClose && _viewModel.MinimizeToTray)
             {
                 e.Cancel = true;
+                _isSysCommandClose = false;
                 Hide();
                 try
                 {
@@ -302,12 +357,10 @@ namespace Lumina
             }
             else
             {
-                if (_notifyIcon != null)
-                {
-                    _notifyIcon.Visible = false;
-                    _notifyIcon.Dispose();
-                }
+                _isSysCommandClose = false;
+                PrepareExplicitExit();
                 base.OnClosing(e);
+                System.Windows.Application.Current.Shutdown();
             }
         }
 
