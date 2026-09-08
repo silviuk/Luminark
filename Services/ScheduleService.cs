@@ -99,13 +99,7 @@ namespace Lumina.Services
 
                 if (settings.SyncWithNightLight)
                 {
-                    if (settings.NightLightSyncMode == 0)
-                    {
-                        // Follow Windows Night Light live state
-                        bool isNightLightActive = _nightLightService.IsNightLightActive();
-                        isDay = !isNightLightActive;
-                    }
-                    else if (settings.NightLightSyncMode == 1)
+                    if (settings.NightLightSyncMode == 1)
                     {
                         // Follow Windows Sunset and Sunrise times
                         var info = _nightLightService.GetNightLightInfo();
@@ -115,9 +109,9 @@ namespace Lumina.Services
                     }
                     else
                     {
-                        // Standard schedule, driving Night Light
-                        isDay = IsDaytime(now, settings.DayTime, settings.NightTime);
-                        _nightLightService.SetNightLightState(!isDay);
+                        // Follow Windows Night Light live state (default)
+                        bool isNightLightActive = _nightLightService.IsNightLightActive();
+                        isDay = !isNightLightActive;
                     }
                 }
                 else
@@ -145,11 +139,6 @@ namespace Lumina.Services
                         uint targetBrightness = isDay ? settings.DayBrightness : settings.NightBrightness;
                         var monitors = _activeMonitorsProvider?.Invoke() ?? _monitorService.EnumerateMonitors();
                         _monitorService.SetAllBrightness(monitors, targetBrightness);
-                    }
-
-                    if (settings.SyncWithNightLight && settings.NightLightSyncMode == 2)
-                    {
-                        _nightLightService.SetNightLightState(!isDay);
                     }
 
                     ScheduleTriggered?.Invoke(isDay);

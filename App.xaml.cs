@@ -13,7 +13,6 @@ namespace Lumina
         private ThemeService? _themeService;
         private MonitorService? _monitorService;
         private NightLightService? _nightLightService;
-        private ScreenTintService? _screenTintService;
         private SettingsService? _settingsService;
         private ScheduleService? _scheduleService;
         private MainViewModel? _viewModel;
@@ -90,9 +89,6 @@ namespace Lumina
                 Log("Initializing NightLightService");
                 _nightLightService = new NightLightService();
 
-                Log("Initializing ScreenTintService");
-                _screenTintService = new ScreenTintService();
-
                 Log("Initializing ScheduleService");
                 _scheduleService = new ScheduleService(_themeService, _monitorService, _nightLightService, () => settings);
 
@@ -110,7 +106,7 @@ namespace Lumina
                 }
 
                 Log("Initializing MainViewModel");
-                _viewModel = new MainViewModel(_themeService, _monitorService, _nightLightService, _screenTintService, _settingsService, _scheduleService);
+                _viewModel = new MainViewModel(_themeService, _monitorService, _nightLightService, _settingsService, _scheduleService);
 
                 Log("Creating MainWindow");
                 var mainWindow = new MainWindow(_viewModel);

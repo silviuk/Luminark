@@ -14,7 +14,6 @@ namespace Lumina.ViewModels
         private readonly ThemeService _themeService;
         private readonly MonitorService _monitorService;
         private readonly NightLightService _nightLightService;
-        private readonly ScreenTintService _screenTintService;
         private readonly SettingsService _settingsService;
         private readonly ScheduleService _scheduleService;
 
@@ -28,14 +27,12 @@ namespace Lumina.ViewModels
             ThemeService themeService,
             MonitorService monitorService,
             NightLightService nightLightService,
-            ScreenTintService screenTintService,
             SettingsService settingsService,
             ScheduleService scheduleService)
         {
             _themeService = themeService;
             _monitorService = monitorService;
             _nightLightService = nightLightService;
-            _screenTintService = screenTintService;
             _settingsService = settingsService;
             _scheduleService = scheduleService;
 
@@ -88,13 +85,6 @@ namespace Lumina.ViewModels
             {
                 uint targetBrightness = isLight ? _settings.DayBrightness : _settings.NightBrightness;
                 MasterBrightness = targetBrightness;
-            }
-
-            // If LinkThemeToNightLight is enabled: Light mode disables Night Light, Dark mode enables Night Light
-            if (_settings.LinkThemeToNightLight && _nightLightService.IsSupported())
-            {
-                _nightLightService.SetNightLightState(!isLight);
-                RefreshNightLightInfo();
             }
 
             UpdateThemeProperties();
@@ -432,7 +422,6 @@ namespace Lumina.ViewModels
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsSyncModeFollowState));
                     OnPropertyChanged(nameof(IsSyncModeFollowSunset));
-                    OnPropertyChanged(nameof(IsSyncModeDriveNightLight));
                     SaveSettings();
                     _scheduleService.ResetLastAppliedState();
                     _scheduleService.EvaluateSchedule(force: true);
@@ -450,41 +439,6 @@ namespace Lumina.ViewModels
         {
             get => NightLightSyncMode == 1;
             set { if (value) NightLightSyncMode = 1; }
-        }
-
-        public bool IsSyncModeDriveNightLight
-        {
-            get => NightLightSyncMode == 2;
-            set { if (value) NightLightSyncMode = 2; }
-        }
-
-        public bool LinkThemeToNightLight
-        {
-            get => _settings.LinkThemeToNightLight;
-            set
-            {
-                if (_settings.LinkThemeToNightLight != value)
-                {
-                    _settings.LinkThemeToNightLight = value;
-                    OnPropertyChanged();
-                    SaveSettings();
-                }
-            }
-        }
-
-        public bool IsScreenTintSupported => _screenTintService.IsSupported();
-
-        public bool IsScreenTintActive
-        {
-            get => _screenTintService.IsScreenTintActive();
-            set
-            {
-                if (_screenTintService.IsScreenTintActive() != value)
-                {
-                    _screenTintService.SetScreenTint(value);
-                    OnPropertyChanged();
-                }
-            }
         }
 
         public string NightLightStatusText
@@ -726,10 +680,8 @@ namespace Lumina.ViewModels
                 {
                     return _settings.NightLightSyncMode switch
                     {
-                        0 => "Following Windows Night Light",
                         1 => "Following Sunset & Sunrise",
-                        2 => "Driving Windows Night Light",
-                        _ => "Night Light Active"
+                        _ => "Following Windows Night Light"
                     };
                 }
                 if (_settings.AutoThemeEnabled)

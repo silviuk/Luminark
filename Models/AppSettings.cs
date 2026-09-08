@@ -18,8 +18,7 @@ namespace Lumina.Models
         public bool LinkBrightnessToTheme { get; set; } = true;
 
         public bool SyncWithNightLight { get; set; } = false;
-        public int NightLightSyncMode { get; set; } = 0; // 0 = Follow State, 1 = Follow Sunset/Sunrise, 2 = Drive Night Light
-        public bool LinkThemeToNightLight { get; set; } = false; // When toggling Light/Dark theme, also toggle Night Light (Light -> NL Off, Dark -> NL On)
+        public int NightLightSyncMode { get; set; } = 0; // 0 = Follow State, 1 = Follow Sunset/Sunrise
 
         public bool IsMonitorsLinked { get; set; } = true;
         public int LockScreenDelaySeconds { get; set; } = 3; // 0 = Instant, 3s, 5s, 10s

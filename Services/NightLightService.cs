@@ -199,47 +199,6 @@ namespace Lumina.Services
             return info;
         }
 
-        public bool SetNightLightState(bool enable)
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(StateKeyPath, writable: true);
-                if (key?.GetValue("Data") is byte[] data && data.Length > 18)
-                {
-                    bool currentActive = data[18] == 0x13 || data[18] == 0x15 || data[18] == 0x14;
-                    if (currentActive == enable) return true;
-
-                    if (enable)
-                    {
-                        // Enable Night Light
-                        byte[] newData = new byte[data.Length + 5];
-                        Array.Copy(data, 0, newData, 0, 18);
-                        newData[18] = 0x15;
-                        newData[19] = 0x00;
-                        newData[20] = 0x00;
-                        newData[21] = 0x00;
-                        newData[22] = 0x00;
-                        if (data.Length > 19)
-                        {
-                            Array.Copy(data, 19, newData, 24, data.Length - 19);
-                        }
-                        key.SetValue("Data", newData, RegistryValueKind.Binary);
-                    }
-                    else
-                    {
-                        // Disable Night Light
-                        data[18] = 0x10;
-                        key.SetValue("Data", data, RegistryValueKind.Binary);
-                    }
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error setting Night Light state: {ex.Message}");
-            }
-            return false;
-        }
 
         private static int FindPattern(byte[] source, byte[] pattern)
         {
