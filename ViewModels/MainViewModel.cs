@@ -79,6 +79,22 @@ namespace Lumina.ViewModels
             SetTheme(newIsLight);
         }
 
+        public void SetDarkMode()
+        {
+            if (IsLightTheme)
+            {
+                SetTheme(false);
+            }
+        }
+
+        public void SetLightMode()
+        {
+            if (!IsLightTheme)
+            {
+                SetTheme(true);
+            }
+        }
+
         public void SetTheme(bool isLight)
         {
             _themeService.SetTheme(isLight);
@@ -606,6 +622,82 @@ namespace Lumina.ViewModels
                     SaveSettings();
                 }
             }
+        }
+
+        public event Action? ShortcutsConfigChanged;
+
+        public bool EnableGlobalShortcuts
+        {
+            get => _settings.EnableGlobalShortcuts;
+            set
+            {
+                if (_settings.EnableGlobalShortcuts != value)
+                {
+                    _settings.EnableGlobalShortcuts = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public string DarkModeShortcut
+        {
+            get => _settings.DarkModeShortcut ?? "Ctrl+Alt+D";
+            set
+            {
+                if (_settings.DarkModeShortcut != value)
+                {
+                    _settings.DarkModeShortcut = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public string LightModeShortcut
+        {
+            get => _settings.LightModeShortcut ?? "Ctrl+Alt+L";
+            set
+            {
+                if (_settings.LightModeShortcut != value)
+                {
+                    _settings.LightModeShortcut = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public string ToggleThemeShortcut
+        {
+            get => _settings.ToggleThemeShortcut ?? "Ctrl+Alt+T";
+            set
+            {
+                if (_settings.ToggleThemeShortcut != value)
+                {
+                    _settings.ToggleThemeShortcut = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public void ResetShortcutsToDefaults()
+        {
+            _settings.EnableGlobalShortcuts = true;
+            _settings.DarkModeShortcut = "Ctrl+Alt+D";
+            _settings.LightModeShortcut = "Ctrl+Alt+L";
+            _settings.ToggleThemeShortcut = "Ctrl+Alt+T";
+            OnPropertyChanged(nameof(EnableGlobalShortcuts));
+            OnPropertyChanged(nameof(DarkModeShortcut));
+            OnPropertyChanged(nameof(LightModeShortcut));
+            OnPropertyChanged(nameof(ToggleThemeShortcut));
+            SaveSettings();
+            ShortcutsConfigChanged?.Invoke();
         }
 
         public string AppVersionText

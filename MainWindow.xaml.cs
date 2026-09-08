@@ -17,6 +17,7 @@ namespace Lumina
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayFlyoutWindow? _flyoutWindow;
         private TrayScrollHook? _scrollHook;
+        private HotkeyService? _hotkeyService;
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
         private bool _isExplicitExit = false;
         private bool _isSysCommandClose = false;
@@ -211,6 +212,13 @@ namespace Lumina
                 var source = System.Windows.Interop.HwndSource.FromHwnd(handle);
                 source?.AddHook(WndProc);
                 UpdateDwmTheme(_viewModel.IsLightTheme);
+
+                _hotkeyService = new HotkeyService(_viewModel);
+                _hotkeyService.Initialize(handle);
+                _viewModel.ShortcutsConfigChanged += () =>
+                {
+                    Dispatcher.Invoke(() => _hotkeyService?.RegisterAll());
+                };
             }
             catch (Exception ex)
             {
@@ -266,6 +274,8 @@ namespace Lumina
             _isExplicitExit = true;
             try
             {
+                _hotkeyService?.Dispose();
+                _hotkeyService = null;
                 _scrollHook?.Dispose();
                 _flyoutWindow?.Close();
                 if (_notifyIcon != null)
@@ -319,6 +329,16 @@ namespace Lumina
                     App.Log("[MainWindow] External/RestartManager WM_CLOSE detected -> triggering explicit exit");
                     PrepareExplicitExit();
                     Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+            }
+            else if (msg == NativeMethods.WM_HOTKEY)
+            {
+                int id = wParam.ToInt32();
+                App.Log($"[MainWindow] WM_HOTKEY received: id={id}");
+                if (_hotkeyService != null && _hotkeyService.HandleHotkeyMessage(id))
+                {
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -405,6 +425,78 @@ namespace Lumina
             {
                 App.Log($"[MainWindow] Failed to open GitHub: {ex.Message}");
             }
+        }
+
+        private void OnShortcutTextBoxPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.TextBox textBox) return;
+
+            var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+
+            // Ignore pure modifier presses
+            if (key is System.Windows.Input.Key.LeftCtrl or System.Windows.Input.Key.RightCtrl or
+                       System.Windows.Input.Key.LeftAlt or System.Windows.Input.Key.RightAlt or
+                       System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift or
+                       System.Windows.Input.Key.LWin or System.Windows.Input.Key.RWin)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            if (key is System.Windows.Input.Key.Back or System.Windows.Input.Key.Delete or System.Windows.Input.Key.Escape)
+            {
+                textBox.Text = "None";
+                var be = textBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty);
+                be?.UpdateSource();
+                return;
+            }
+
+            var modifiers = System.Windows.Input.Keyboard.Modifiers;
+            var parts = new List<string>();
+            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control)) parts.Add("Ctrl");
+            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) parts.Add("Alt");
+            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift)) parts.Add("Shift");
+            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Windows)) parts.Add("Win");
+
+            if (parts.Count == 0)
+            {
+                // Must have at least one modifier key
+                return;
+            }
+
+            string keyName = key.ToString();
+            if (key >= System.Windows.Input.Key.D0 && key <= System.Windows.Input.Key.D9)
+            {
+                keyName = keyName.Substring(1);
+            }
+
+            parts.Add(keyName);
+            string shortcut = string.Join("+", parts);
+
+            textBox.Text = shortcut;
+            var binding = textBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty);
+            binding?.UpdateSource();
+        }
+
+        private void OnClearDarkShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.DarkModeShortcut = "None";
+        }
+
+        private void OnClearLightShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.LightModeShortcut = "None";
+        }
+
+        private void OnClearToggleShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.ToggleThemeShortcut = "None";
+        }
+
+        private void OnResetShortcutsClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.ResetShortcutsToDefaults();
         }
 
         public static void TrimMemory()

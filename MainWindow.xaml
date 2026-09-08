@@ -575,6 +575,139 @@
                             </StackPanel>
                         </ui:Card>
 
+                        <!-- Global Shortcuts Card -->
+                        <ui:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Global Keyboard Shortcuts" FontSize="16" FontWeight="SemiBold" />
+                                        <TextBlock Text="Control themes system-wide with hotkeys, even when Luminark is minimized to the tray" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableGlobalShortcuts, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <!-- Dark Mode Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Switch to Dark Mode" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Directly activate Windows dark theme and night brightness" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding DarkModeShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Ctrl+Alt+D). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearDarkShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Light Mode Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Switch to Light Mode" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Directly activate Windows light theme and day brightness" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding LightModeShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Ctrl+Alt+L). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearLightShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Toggle Theme Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Toggle Dark / Light Mode" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Switch between light and dark modes with a single hotkey" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding ToggleThemeShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Ctrl+Alt+T). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearToggleShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Reset to Defaults -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Reset all shortcuts to defaults (Ctrl+Alt+D, Ctrl+Alt+L, Ctrl+Alt+T)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <ui:Button Grid.Column="1"
+                                               Appearance="Secondary"
+                                               Padding="12,6"
+                                               Click="OnResetShortcutsClicked"
+                                               VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="ArrowReset24" FontSize="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="Reset Defaults" FontSize="12" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </ui:Button>
+                                </Grid>
+
+                            </StackPanel>
+                        </ui:Card>
+
                         <!-- About Card -->
                         <ui:Card Padding="20">
                             <Grid>

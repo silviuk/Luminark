@@ -25,5 +25,9 @@ namespace Lumina.Models
         public bool PreventSleep { get; set; } = false;
         public int PreventSleepDurationMinutes { get; set; } = 0; // 0 = Forever, 30, 60, 120, 240, 480
         public int TrayDoubleClickAction { get; set; } = 0; // 0 = Toggle Dark/Light Mode, 1 = Open Main Window
+        public bool EnableGlobalShortcuts { get; set; } = true;
+        public string DarkModeShortcut { get; set; } = "Ctrl+Alt+D";
+        public string LightModeShortcut { get; set; } = "Ctrl+Alt+L";
+        public string ToggleThemeShortcut { get; set; } = "Ctrl+Alt+T";
     }
 }
