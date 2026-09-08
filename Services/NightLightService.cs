@@ -15,6 +15,7 @@ namespace Lumina.Services
 
     public class NightLightService : IDisposable
     {
+        private const string CloudStoreRootPath = @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current";
         private const string StateKeyPath = @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.bluelightreductionstate\windows.data.bluelightreduction.bluelightreductionstate";
         private const string SettingsKeyPath = @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings";
 
@@ -49,47 +50,44 @@ namespace Lumina.Services
         {
             using var changeEvent = new System.Threading.AutoResetEvent(false);
             bool lastActive = IsNightLightActive();
+            App.Log($"[NightLightService] Watcher started. Initial active state: {lastActive}");
 
             while (!_cts.IsCancellationRequested)
             {
                 try
                 {
-                    using var key = Registry.CurrentUser.OpenSubKey(StateKeyPath);
-                    if (key == null)
+                    using var key = Registry.CurrentUser.OpenSubKey(CloudStoreRootPath);
+                    if (key != null)
                     {
-                        System.Threading.Thread.Sleep(5000);
-                        continue;
+                        NativeMethods.RegNotifyChangeKeyValue(
+                            key.Handle.DangerousGetHandle(),
+                            true, // Watch all CloudStore bluelight subtrees
+                            NativeMethods.REG_NOTIFY_CHANGE_NAME | NativeMethods.REG_NOTIFY_CHANGE_LAST_SET,
+                            changeEvent.SafeWaitHandle.DangerousGetHandle(),
+                            true);
                     }
 
-                    int result = NativeMethods.RegNotifyChangeKeyValue(
-                        key.Handle.DangerousGetHandle(),
-                        false,
-                        NativeMethods.REG_NOTIFY_CHANGE_LAST_SET,
-                        changeEvent.SafeWaitHandle.DangerousGetHandle(),
-                        true);
-
-                    if (result != 0)
-                    {
-                        System.Threading.Thread.Sleep(5000);
-                        continue;
-                    }
-
+                    // Wait on native registry event, cancellation token, or 1000ms safety timeout
                     int waitIndex = System.Threading.WaitHandle.WaitAny(
-                        new System.Threading.WaitHandle[] { changeEvent, _cts.Token.WaitHandle });
+                        new System.Threading.WaitHandle[] { changeEvent, _cts.Token.WaitHandle },
+                        1000);
 
                     if (waitIndex == 1 || _cts.IsCancellationRequested)
                     {
                         break;
                     }
 
-                    // Debounce slightly to let registry commit complete
-                    System.Threading.Thread.Sleep(100);
+                    if (waitIndex == 0)
+                    {
+                        // Native event triggered -> brief debounce for Windows commit
+                        System.Threading.Thread.Sleep(80);
+                    }
 
                     bool currentActive = IsNightLightActive();
                     if (currentActive != lastActive)
                     {
                         lastActive = currentActive;
-                        App.Log($"[NightLightService] Native event: Night Light active changed -> {currentActive}");
+                        App.Log($"[NightLightService] Night Light active changed -> {currentActive}");
                         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
                         {
                             StateChanged?.Invoke(currentActive);

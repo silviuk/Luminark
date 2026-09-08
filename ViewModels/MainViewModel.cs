@@ -39,6 +39,7 @@ namespace Lumina.ViewModels
             _settings = _settingsService.Load();
 
             _themeService.ThemeChanged += OnThemeChanged;
+            _nightLightService.StateChanged += OnNightLightStateChanged;
             _scheduleService.ScheduleTriggered += OnScheduleTriggered;
             _scheduleService.SetActiveMonitorsProvider(() => Monitors);
 
@@ -92,7 +93,27 @@ namespace Lumina.ViewModels
 
         private void OnThemeChanged(bool isLight)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(UpdateThemeProperties);
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_settings.LinkBrightnessToTheme && Monitors.Count > 0)
+                {
+                    uint targetBrightness = isLight ? _settings.DayBrightness : _settings.NightBrightness;
+                    MasterBrightness = targetBrightness;
+                }
+                UpdateThemeProperties();
+            });
+        }
+
+        private void OnNightLightStateChanged(bool isActive)
+        {
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                RefreshNightLightInfo();
+                OnPropertyChanged(nameof(NightLightStatusText));
+                OnPropertyChanged(nameof(SunsetText));
+                OnPropertyChanged(nameof(SunriseText));
+                OnPropertyChanged(nameof(AutomationModeText));
+            });
         }
 
         private void OnScheduleTriggered(bool isDay)
