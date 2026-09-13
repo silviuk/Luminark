@@ -196,14 +196,34 @@ jobs:
             exit 1
           }
 
-          Write-Host "Publishing package ($pkgPath) to Store Product ID: $env:APP_ID..."
-          msstore publish $pkgPath -id $env:APP_ID -v
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Successfully published package to Microsoft Store!"
-            "store_status=Published successfully via msstore-cli" >> $env:GITHUB_OUTPUT
+          Write-Host "Listing registered products in Partner Center..."
+          msstore apps list
+
+          if ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH)) {
+            Write-Host "Publishing MSIX package ($env:MSIX_PATH) to Store Product ID: $env:APP_ID..."
+            msstore publish $env:MSIX_PATH -id $env:APP_ID -v
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Successfully published package to Microsoft Store!"
+              "store_status=Published successfully via msstore-cli" >> $env:GITHUB_OUTPUT
+            } else {
+              Write-Error "msstore publish failed with exit code $LASTEXITCODE"
+              "store_status=msstore publish failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
+              exit 1
+            }
+          } elseif ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
+            Write-Host "=========================================================="
+            Write-Host "Win32 EXE Installer Detected: $($env:EXE_PATH)"
+            Write-Host "Microsoft Store CLI (msstore) requires an .msix package for automated package upload."
+            Write-Host "For unpackaged Win32 (.exe) apps in Microsoft Partner Center:"
+            Write-Host "1. Open Partner Center > Apps and games > Product Overview ($env:APP_ID)"
+            Write-Host "2. Under 'Packages', provide the GitHub Release installer URL:"
+            Write-Host "   $($steps.release_info.outputs.installer_url)"
+            Write-Host "3. Silent install command: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+            Write-Host "=========================================================="
+            "store_status=Win32 EXE release ready (Requires MSIX for CLI upload or URL submission in Partner Center)" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Error "msstore publish failed with exit code $LASTEXITCODE"
-            "store_status=msstore publish failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
+            Write-Error "No installer package (.msix or .exe) found in release assets."
+            "store_status=Failed (No installer found)" >> $env:GITHUB_OUTPUT
             exit 1
           }
 
