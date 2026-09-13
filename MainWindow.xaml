@@ -15,6 +15,7 @@
         Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <Style x:Key="CardMarginStyle" TargetType="ui:Card">
             <Setter Property="Margin" Value="0,0,0,16"/>
         </Style>
@@ -226,8 +227,26 @@
                                                         </Grid.ColumnDefinitions>
 
                                                         <StackPanel Grid.Column="0">
-                                                            <TextBlock Text="{Binding FriendlyName}" FontSize="15" FontWeight="Medium" />
-                                                            <TextBlock Text="{Binding DisplayTechnologyText}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <ui:TextBox Text="{Binding CustomName, UpdateSourceTrigger=PropertyChanged}"
+                                                                            PlaceholderText="{Binding FriendlyName}"
+                                                                            FontSize="14"
+                                                                            FontWeight="Medium"
+                                                                            Width="240"
+                                                                            VerticalAlignment="Center"
+                                                                            Padding="6,3"
+                                                                            ToolTip="Rename display (clear to restore hardware name)" />
+                                                                <ui:Button Appearance="Transparent"
+                                                                           Padding="4,3"
+                                                                           Margin="4,0,0,0"
+                                                                           ToolTip="Reset to default hardware name"
+                                                                           Click="OnResetMonitorNameClicked"
+                                                                           Tag="{Binding}"
+                                                                           Visibility="{Binding HasCustomName, Converter={StaticResource BoolToVis}}">
+                                                                    <ui:SymbolIcon Symbol="ArrowReset24" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                                </ui:Button>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding DisplayTechnologyText}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
                                                         </StackPanel>
 
                                                         <Border Grid.Column="1" Background="{DynamicResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
@@ -547,6 +566,28 @@
                                               SelectedValue="{Binding LockScreenDelaySeconds, Mode=TwoWay}"
                                               VerticalAlignment="Center" />
                                 </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Monitor Input Change Delay -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Monitor input change delay" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Countdown duration before switching monitor input source, allowing cancellation via Esc" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1"
+                                              Width="160"
+                                              ItemsSource="{Binding InputDelayOptions}"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Seconds"
+                                              SelectedValue="{Binding MonitorInputSwitchDelaySeconds, Mode=TwoWay}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+
                                 <Separator Margin="0,12,0,12" />
 
                                 <!-- Prevent Sleep -->

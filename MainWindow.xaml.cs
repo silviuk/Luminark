@@ -183,6 +183,12 @@ namespace Lumina
                 });
                 contextMenu.Items.Add(lockItem);
 
+                var redetectItem = new ToolStripMenuItem("Re-detect Displays", null, (s, e) =>
+                {
+                    Dispatcher.Invoke(() => _viewModel.RefreshMonitors());
+                });
+                contextMenu.Items.Add(redetectItem);
+
                 contextMenu.Items.Add(new ToolStripSeparator());
 
                 var exitItem = new ToolStripMenuItem("Exit Luminark", null, (s, e) =>
@@ -298,6 +304,11 @@ namespace Lumina
                 App.Log("[MainWindow] Received WM_SHOWLUMINARK broadcast! Bringing window to foreground.");
                 ShowAndActivate();
                 handled = true;
+            }
+            else if (msg == 0x007E) // WM_DISPLAYCHANGE
+            {
+                App.Log("[MainWindow] WM_DISPLAYCHANGE received");
+                _viewModel.ScheduleDisplaySettingsRefresh();
             }
             else if (msg == WM_SYSCOMMAND && ((int)wParam & 0xFFF0) == SC_CLOSE)
             {
@@ -497,6 +508,14 @@ namespace Lumina
         private void OnResetShortcutsClicked(object sender, RoutedEventArgs e)
         {
             _viewModel.ResetShortcutsToDefaults();
+        }
+
+        private void OnResetMonitorNameClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Models.MonitorInfo monitor)
+            {
+                _viewModel.ResetMonitorName(monitor);
+            }
         }
 
         public static void TrimMemory()

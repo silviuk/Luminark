@@ -50,6 +50,15 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Re-detect Displays Button -->
+                    <ui:Button Appearance="Secondary"
+                               Click="OnRefreshDisplaysClicked"
+                               ToolTip="Force Re-detect Displays"
+                               Padding="8,5"
+                               Margin="0,0,6,0">
+                        <ui:SymbolIcon Symbol="ArrowReset24" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    </ui:Button>
+
                     <!-- Toggle Theme Button -->
                     <ui:Button Appearance="Secondary"
                                Click="OnToggleThemeClicked"

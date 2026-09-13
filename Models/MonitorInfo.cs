@@ -32,7 +32,27 @@ namespace Lumina.Models
         public uint MaxBrightness { get; set; } = 100;
         public string InstanceName { get; set; } = string.Empty;
 
-        public string DisplayName => !string.IsNullOrWhiteSpace(FriendlyName) ? FriendlyName : DeviceName;
+        private string? _customName;
+        public string? CustomName
+        {
+            get => _customName;
+            set
+            {
+                if (_customName != value)
+                {
+                    _customName = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayName));
+                    OnPropertyChanged(nameof(HasCustomName));
+                }
+            }
+        }
+
+        public bool HasCustomName => !string.IsNullOrWhiteSpace(_customName);
+
+        public string DisplayName => !string.IsNullOrWhiteSpace(_customName)
+            ? _customName
+            : (!string.IsNullOrWhiteSpace(FriendlyName) ? FriendlyName : DeviceName);
 
         #region Brightness
         private uint _currentBrightness = 50;
@@ -209,11 +229,11 @@ namespace Lumina.Models
 
         public Action<MonitorInfo, uint?>? OnInputSelectionRequested { get; set; }
 
-        public void StartInputCountdown(uint targetCode, string targetName, Action<MonitorInfo, uint> onExecute)
+        public void StartInputCountdown(uint targetCode, string targetName, int durationSeconds, Action<MonitorInfo, uint> onExecute)
         {
             _inputCountdownTimer?.Stop();
             _pendingInputName = targetName;
-            InputCountdownRemaining = 3;
+            InputCountdownRemaining = durationSeconds > 0 ? durationSeconds : 3;
             IsSwitchingInput = true;
 
             _inputCountdownTimer = new DispatcherTimer

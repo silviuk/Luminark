@@ -43,6 +43,15 @@ namespace Lumina.ViewModels
             _scheduleService.ScheduleTriggered += OnScheduleTriggered;
             _scheduleService.SetActiveMonitorsProvider(() => Monitors);
 
+            try
+            {
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainViewModel] Could not hook DisplaySettingsChanged: {ex.Message}");
+            }
+
             App.Log("MainViewModel: RefreshMonitors started");
             RefreshMonitors();
             App.Log("MainViewModel: RefreshMonitors completed");
@@ -54,6 +63,39 @@ namespace Lumina.ViewModels
             App.Log("MainViewModel: RefreshNightLightInfo completed");
 
             UpdateExecutionState();
+        }
+
+        private System.Threading.CancellationTokenSource? _displayChangeCts;
+
+        private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            App.Log("[MainViewModel] SystemEvents.DisplaySettingsChanged triggered");
+            ScheduleDisplaySettingsRefresh();
+        }
+
+        public void ScheduleDisplaySettingsRefresh()
+        {
+            try
+            {
+                _displayChangeCts?.Cancel();
+                _displayChangeCts?.Dispose();
+            }
+            catch { }
+
+            _displayChangeCts = new System.Threading.CancellationTokenSource();
+            var token = _displayChangeCts.Token;
+
+            System.Threading.Tasks.Task.Delay(800, token).ContinueWith(t =>
+            {
+                if (!t.IsCanceled)
+                {
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                    {
+                        App.Log("[MainViewModel] Display configuration changed -> auto re-detecting monitors");
+                        RefreshMonitors();
+                    });
+                }
+            }, System.Threading.Tasks.TaskScheduler.Default);
         }
 
         public AppSettings Settings => _settings;
@@ -201,9 +243,26 @@ namespace Lumina.ViewModels
             Monitors.Clear();
             foreach (var mon in detected)
             {
+                if (_settings.CustomMonitorNames.TryGetValue(mon.Id, out var savedCustomName) && !string.IsNullOrWhiteSpace(savedCustomName))
+                {
+                    mon.CustomName = savedCustomName;
+                }
+
                 mon.PropertyChanged += (s, e) =>
                 {
-                    if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) && !_isUpdatingMasterBrightness)
+                    if (e.PropertyName == nameof(MonitorInfo.CustomName))
+                    {
+                        if (string.IsNullOrWhiteSpace(mon.CustomName))
+                        {
+                            _settings.CustomMonitorNames.Remove(mon.Id);
+                        }
+                        else
+                        {
+                            _settings.CustomMonitorNames[mon.Id] = mon.CustomName.Trim();
+                        }
+                        SaveSettings();
+                    }
+                    else if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) && !_isUpdatingMasterBrightness)
                     {
                         _isUpdatingIndividualBrightness = true;
                         _monitorService.SetBrightness(mon, mon.CurrentBrightness);
@@ -234,10 +293,20 @@ namespace Lumina.ViewModels
                     var opt = m.InputOptions.FirstOrDefault(o => o.Code == targetCode.Value);
                     string targetName = opt?.Name ?? $"Input (0x{targetCode.Value:X2})";
 
-                    m.StartInputCountdown(targetCode.Value, targetName, (monitorToSwitch, code) =>
+                    int delay = MonitorInputSwitchDelaySeconds;
+                    if (delay <= 0)
                     {
-                        _monitorService.SetInputSource(monitorToSwitch, code);
-                    });
+                        m.CancelInputSwitch();
+                        m.ActiveInputCode = targetCode.Value;
+                        _monitorService.SetInputSource(m, targetCode.Value);
+                    }
+                    else
+                    {
+                        m.StartInputCountdown(targetCode.Value, targetName, delay, (monitorToSwitch, code) =>
+                        {
+                            _monitorService.SetInputSource(monitorToSwitch, code);
+                        });
+                    }
                 };
 
                 Monitors.Add(mon);
@@ -265,6 +334,13 @@ namespace Lumina.ViewModels
         public void SetIndividualBrightness(MonitorInfo monitor, uint brightness)
         {
             _monitorService.SetBrightness(monitor, brightness);
+        }
+
+        public void ResetMonitorName(MonitorInfo monitor)
+        {
+            monitor.CustomName = null;
+            _settings.CustomMonitorNames.Remove(monitor.Id);
+            SaveSettings();
         }
 
         #endregion
@@ -605,6 +681,30 @@ namespace Lumina.ViewModels
         }
 
         public string LockDelayDisplayText => LockScreenDelaySeconds == 0 ? "Instant" : $"{LockScreenDelaySeconds}s delay";
+
+        public record InputDelayOption(string DisplayName, int Seconds);
+
+        public IReadOnlyList<InputDelayOption> InputDelayOptions { get; } = new List<InputDelayOption>
+        {
+            new("Instant (No delay)", 0),
+            new("1 second", 1),
+            new("3 seconds", 3),
+            new("5 seconds", 5)
+        };
+
+        public int MonitorInputSwitchDelaySeconds
+        {
+            get => _settings.MonitorInputSwitchDelaySeconds;
+            set
+            {
+                if (_settings.MonitorInputSwitchDelaySeconds != value)
+                {
+                    _settings.MonitorInputSwitchDelaySeconds = Math.Clamp(value, 0, 30);
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
 
         public record SleepDurationOption(string DisplayName, int Minutes);
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Lumina.Models
 {
@@ -22,6 +23,8 @@ namespace Lumina.Models
 
         public bool IsMonitorsLinked { get; set; } = true;
         public int LockScreenDelaySeconds { get; set; } = 3; // 0 = Instant, 3s, 5s, 10s
+        public int MonitorInputSwitchDelaySeconds { get; set; } = 3; // 0 = Instant, 1s, 3s, 5s
+        public Dictionary<string, string> CustomMonitorNames { get; set; } = new();
         public bool PreventSleep { get; set; } = false;
         public int PreventSleepDurationMinutes { get; set; } = 0; // 0 = Forever, 30, 60, 120, 240, 480
         public int TrayDoubleClickAction { get; set; } = 0; // 0 = Toggle Dark/Light Mode, 1 = Open Main Window
