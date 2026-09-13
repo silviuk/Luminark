@@ -217,24 +217,27 @@ jobs:
           if ($appObj.pendingApplicationSubmission -and $appObj.pendingApplicationSubmission.id) {
             $candidateSubId = $appObj.pendingApplicationSubmission.id
             Write-Host "Found existing pending submission: $candidateSubId"
-            $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
+            $statusUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId/status"
             try {
-              $checkSub = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
-              if ($checkSub.status -eq "CommitFailed" -or $checkSub.status -eq "None") {
-                Write-Host "Existing submission is in state '$($checkSub.status)'. Deleting and recreating fresh submission..."
+              $statusObj = Invoke-RestMethod -Method Get -Uri $statusUri -Headers $headers
+              Write-Host "Existing submission status: $($statusObj.status)"
+              if ($statusObj.status -eq "CommitStarted" -or $statusObj.status -eq "PreProcessing" -or $statusObj.status -eq "Certification" -or $statusObj.status -eq "Release") {
+                Write-Host "Existing submission $candidateSubId is ALREADY committed and active in Partner Center (Status: $($statusObj.status))."
+                Write-Host "Successfully submitted to Microsoft Store! Status: $($statusObj.status)"
+                "store_status=Submitted for Certification (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
+                exit 0
+              } elseif ($statusObj.status -eq "CommitFailed" -or $statusObj.status -eq "None") {
+                Write-Host "Existing submission is in state '$($statusObj.status)'. Deleting and recreating fresh submission..."
+                $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
                 Invoke-RestMethod -Method Delete -Uri $subUri -Headers $headers
                 Start-Sleep -Seconds 2
-              } elseif ($checkSub.status -eq "CommitStarted" -or $checkSub.status -eq "PreProcessing" -or $checkSub.status -eq "Certification" -or $checkSub.status -eq "Release") {
-                Write-Host "Existing submission $candidateSubId is ALREADY submitted and active in Partner Center (Status: $($checkSub.status))."
-                Write-Host "Successfully submitted to Microsoft Store! Status: $($checkSub.status)"
-                "store_status=Submitted for Certification (Status: $($checkSub.status))" >> $env:GITHUB_OUTPUT
-                exit 0
               } else {
                 $subId = $candidateSubId
-                $subObj = $checkSub
+                $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
+                $subObj = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
               }
             } catch {
-              Write-Warning "Could not query existing submission $candidateSubId, recreating: $_"
+              Write-Warning "Could not query existing submission $candidateSubId status: $_"
             }
           }
 
