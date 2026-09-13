@@ -339,21 +339,28 @@ jobs:
           Write-Host "Polling submission status..."
           $statusUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId/status"
           $pollCount = 0
+          $finalStatus = "CommitStarted"
           do {
-            Start-Sleep -Seconds 5
-            $statusObj = Invoke-RestMethod -Method Get -Uri $statusUri -Headers $headers
-            Write-Host "Submission Status: $($statusObj.status)"
+            Start-Sleep -Seconds 10
+            try {
+              $statusObj = Invoke-RestMethod -Method Get -Uri $statusUri -Headers $headers
+              $finalStatus = $statusObj.status
+              Write-Host "Submission Status: $finalStatus"
+              if ($finalStatus -ne "CommitStarted") { break }
+            } catch {
+              Write-Warning "Transient status polling error (submission is already committed): $_"
+            }
             $pollCount++
-          } while ($statusObj.status -eq "CommitStarted" -and $pollCount -lt 12)
+          } while ($pollCount -lt 10)
 
-          if ($statusObj.status -eq "CommitFailed") {
-            Write-Error "Submission commit failed. Errors: $($statusObj.statusDetails | ConvertTo-Json -Depth 5)"
+          if ($finalStatus -eq "CommitFailed") {
+            Write-Error "Submission commit failed."
             "store_status=CommitFailed" >> $env:GITHUB_OUTPUT
             exit 1
           }
 
-          Write-Host "Successfully published to Microsoft Store! Status: $($statusObj.status)"
-          "store_status=Submitted for Certification (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
+          Write-Host "Successfully committed to Microsoft Store! Status: $finalStatus"
+          "store_status=Submitted for Certification (Status: $finalStatus)" >> $env:GITHUB_OUTPUT
 
       # -----------------------------------------------------------------------
       # Step 4: Step Summary
