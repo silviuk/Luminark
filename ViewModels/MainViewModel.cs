@@ -85,17 +85,61 @@ namespace Lumina.ViewModels
             _displayChangeCts = new System.Threading.CancellationTokenSource();
             var token = _displayChangeCts.Token;
 
-            System.Threading.Tasks.Task.Delay(800, token).ContinueWith(t =>
+            System.Threading.Tasks.Task.Run(async () =>
             {
-                if (!t.IsCanceled)
+                try
                 {
-                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                    // Stage 1: Wait 2.0s after the display change event.
+                    // This gives the USB-C DP Alt mode / HDMI / GPU link training time to settle.
+                    await System.Threading.Tasks.Task.Delay(2000, token);
+                    if (token.IsCancellationRequested) return;
+
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        App.Log("[MainViewModel] Display configuration changed -> auto re-detecting monitors");
+                        App.Log("[MainViewModel] Display change detection (Stage 1 @ 2.0s) -> scanning monitors");
                         RefreshMonitors();
                     });
+
+                    // Stage 2: Wait another 2.0s (4.0s total from event).
+                    // Slower USB-C docks or 4K/high-res monitors often need 2.5-3.5s to finish DDC/CI initialization.
+                    await System.Threading.Tasks.Task.Delay(2000, token);
+                    if (token.IsCancellationRequested) return;
+
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        App.Log("[MainViewModel] Display change detection (Stage 2 @ 4.0s) -> scanning monitors");
+                        RefreshMonitors();
+                    });
+
+                    // Stage 3: If only 1 monitor was detected so far (e.g. laptop internal screen),
+                    // wait another 2.0s (6.0s total) for exceptionally slow docks/monitors.
+                    int count = 0;
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        count = Monitors.Count;
+                    });
+
+                    if (count <= 1)
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000, token);
+                        if (token.IsCancellationRequested) return;
+
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            App.Log("[MainViewModel] Display change detection (Stage 3 @ 6.0s, count <= 1) -> scanning monitors");
+                            RefreshMonitors();
+                        });
+                    }
                 }
-            }, System.Threading.Tasks.TaskScheduler.Default);
+                catch (System.OperationCanceledException)
+                {
+                    // Debounced by a newer event
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MainViewModel] Error during scheduled monitor refresh: {ex.Message}");
+                }
+            }, token);
         }
 
         public AppSettings Settings => _settings;
@@ -237,15 +281,62 @@ namespace Lumina.ViewModels
             _ => $"{Monitors.Count} Displays connected"
         };
 
-        public void RefreshMonitors()
+        public void RefreshMonitors(bool forceRecreate = false)
         {
             var detected = _monitorService.EnumerateMonitors();
+
+            if (!forceRecreate &&
+                Monitors.Count == detected.Count &&
+                Monitors.Select(m => m.Id).SequenceEqual(detected.Select(d => d.Id)))
+            {
+                // In-place update without resetting UI elements or slider focus
+                for (int i = 0; i < detected.Count; i++)
+                {
+                    var existing = Monitors[i];
+                    var fresh = detected[i];
+                    existing.PhysicalHandle = fresh.PhysicalHandle;
+                    existing.SupportsAudioVolume = fresh.SupportsAudioVolume;
+                    existing.SupportsAudioMute = fresh.SupportsAudioMute;
+                    existing.SupportsInputSelect = fresh.SupportsInputSelect;
+                    if (!_isUpdatingIndividualBrightness && !_isUpdatingMasterBrightness)
+                    {
+                        existing.CurrentBrightness = fresh.CurrentBrightness;
+                    }
+                    existing.CurrentVolume = fresh.CurrentVolume;
+                    existing.IsMuted = fresh.IsMuted;
+                    if (fresh.ActiveInputCode.HasValue && !existing.IsSwitchingInput)
+                    {
+                        existing.ActiveInputCode = fresh.ActiveInputCode;
+                        existing.SelectedInputCode = fresh.SelectedInputCode;
+                    }
+                }
+                App.Log($"[MainViewModel] RefreshMonitors: {Monitors.Count} monitors matched existing list -> updated properties in place");
+                return;
+            }
+
             Monitors.Clear();
+            int monitorIndex = 1;
             foreach (var mon in detected)
             {
                 if (_settings.CustomMonitorNames.TryGetValue(mon.Id, out var savedCustomName) && !string.IsNullOrWhiteSpace(savedCustomName))
                 {
                     mon.CustomName = savedCustomName;
+                }
+                else
+                {
+                    // Legacy migration: check if an older transient ID like "DDC_2_2" exists for this monitor
+                    var legacyKey = _settings.CustomMonitorNames.Keys.FirstOrDefault(k =>
+                        k.EndsWith($"_{monitorIndex}") ||
+                        k.Contains(mon.FriendlyName, StringComparison.OrdinalIgnoreCase) ||
+                        k.Contains(mon.DeviceName, StringComparison.OrdinalIgnoreCase));
+
+                    if (legacyKey != null && _settings.CustomMonitorNames.TryGetValue(legacyKey, out var legacyName) && !string.IsNullOrWhiteSpace(legacyName))
+                    {
+                        mon.CustomName = legacyName;
+                        _settings.CustomMonitorNames.Remove(legacyKey);
+                        _settings.CustomMonitorNames[mon.Id] = legacyName;
+                        SaveSettings();
+                    }
                 }
 
                 mon.PropertyChanged += (s, e) =>
@@ -310,6 +401,7 @@ namespace Lumina.ViewModels
                 };
 
                 Monitors.Add(mon);
+                monitorIndex++;
             }
 
             if (Monitors.Count > 0)

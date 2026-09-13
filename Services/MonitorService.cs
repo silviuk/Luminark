@@ -55,6 +55,14 @@ namespace Lumina.Services
                     {
                         try
                         {
+                            var mi = new NativeMethods.MONITORINFOEX();
+                            mi.cbSize = Marshal.SizeOf(mi);
+                            string devName = "";
+                            if (NativeMethods.GetMonitorInfo(hMonitor, ref mi))
+                            {
+                                devName = mi.szDevice ?? "";
+                            }
+
                             if (NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, out uint count) && count > 0)
                             {
                                 var physMonitors = new NativeMethods.PHYSICAL_MONITOR[count];
@@ -79,6 +87,11 @@ namespace Lumina.Services
                                         string desc = string.IsNullOrWhiteSpace(pm.szPhysicalMonitorDescription)
                                             ? $"Display {monitorIndex}"
                                             : pm.szPhysicalMonitorDescription;
+
+                                        string cleanDev = devName.Replace(@"\\.\", "").Trim();
+                                        string stableId = !string.IsNullOrEmpty(cleanDev)
+                                            ? $"DDC_{cleanDev}_{desc}"
+                                            : $"DDC_{desc}_{monitorIndex}";
 
                                         if (hasBrightness)
                                         {
@@ -111,7 +124,7 @@ namespace Lumina.Services
 
                                             var mon = new MonitorInfo
                                             {
-                                                Id = $"DDC_{pm.hPhysicalMonitor}_{monitorIndex}",
+                                                Id = stableId,
                                                 DeviceName = desc,
                                                 FriendlyName = desc,
                                                 Type = MonitorType.DdcCi,

@@ -154,6 +154,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
           APP_ID: ${{ secrets.MS_STORE_APP_ID }}
           MSIX_PATH: ${{ steps.release_info.outputs.msix_path }}
+          EXE_PATH: ${{ steps.release_info.outputs.exe_path }}
         run: |
           Write-Host "=========================================================="
           Write-Host "Starting Microsoft Store Publication"
@@ -173,9 +174,17 @@ jobs:
             exit 0
           }
 
-          if (-not $env:MSIX_PATH -or -not (Test-Path $env:MSIX_PATH)) {
-            Write-Error "No .msix package found in release assets for Windows Store submission."
-            "store_status=Failed (No MSIX file in release)" >> $env:GITHUB_OUTPUT
+          $pkgPath = if ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH)) {
+            $env:MSIX_PATH
+          } elseif ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
+            $env:EXE_PATH
+          } else {
+            $null
+          }
+
+          if (-not $pkgPath) {
+            Write-Error "No installer package (.msix or .exe) found in release assets for Windows Store submission."
+            "store_status=Failed (No installer/package file in release)" >> $env:GITHUB_OUTPUT
             exit 1
           }
 
@@ -187,8 +196,8 @@ jobs:
             exit 1
           }
 
-          Write-Host "Publishing MSIX package ($env:MSIX_PATH) to Store Product ID: $env:APP_ID..."
-          msstore publish $env:MSIX_PATH -id $env:APP_ID -v
+          Write-Host "Publishing package ($pkgPath) to Store Product ID: $env:APP_ID..."
+          msstore publish $pkgPath -id $env:APP_ID -v
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Successfully published package to Microsoft Store!"
             "store_status=Published successfully via msstore-cli" >> $env:GITHUB_OUTPUT

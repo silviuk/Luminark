@@ -185,7 +185,7 @@ namespace Lumina
 
                 var redetectItem = new ToolStripMenuItem("Re-detect Displays", null, (s, e) =>
                 {
-                    Dispatcher.Invoke(() => _viewModel.RefreshMonitors());
+                    Dispatcher.Invoke(() => _viewModel.RefreshMonitors(forceRecreate: true));
                 });
                 contextMenu.Items.Add(redetectItem);
 
@@ -310,6 +310,14 @@ namespace Lumina
                 App.Log("[MainWindow] WM_DISPLAYCHANGE received");
                 _viewModel.ScheduleDisplaySettingsRefresh();
             }
+            else if (msg == NativeMethods.WM_DEVICECHANGE)
+            {
+                if ((int)wParam == NativeMethods.DBT_DEVNODES_CHANGED)
+                {
+                    App.Log("[MainWindow] WM_DEVICECHANGE (DBT_DEVNODES_CHANGED) received");
+                    _viewModel.ScheduleDisplaySettingsRefresh();
+                }
+            }
             else if (msg == WM_SYSCOMMAND && ((int)wParam & 0xFFF0) == SC_CLOSE)
             {
                 _isSysCommandClose = true;
@@ -407,7 +415,7 @@ namespace Lumina
 
         private void OnRefreshDisplaysClicked(object sender, RoutedEventArgs e)
         {
-            _viewModel.RefreshMonitors();
+            _viewModel.RefreshMonitors(forceRecreate: true);
         }
 
         private void OnPresetClicked(object sender, RoutedEventArgs e)

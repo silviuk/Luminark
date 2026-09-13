@@ -166,7 +166,7 @@ namespace Lumina
 
         private void OnRefreshDisplaysClicked(object sender, RoutedEventArgs e)
         {
-            _viewModel.RefreshMonitors();
+            _viewModel.RefreshMonitors(forceRecreate: true);
         }
 
         private void OnToggleThemeClicked(object sender, RoutedEventArgs e)

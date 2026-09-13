@@ -33,6 +33,20 @@ namespace Lumina.Services
             public int Bottom;
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct MONITORINFOEX
+        {
+            public int cbSize;
+            public Rect rcMonitor;
+            public Rect rcWork;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string szDevice;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
 
@@ -144,6 +158,8 @@ namespace Lumina.Services
         public const int SM_CYSMICON = 50;
         public const int WH_MOUSE_LL = 14;
         public const int WM_MOUSEWHEEL = 0x020A;
+        public const int WM_DEVICECHANGE = 0x0219;
+        public const int DBT_DEVNODES_CHANGED = 0x0007;
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool LockWorkStation();
