@@ -203,16 +203,16 @@ jobs:
           Write-Host "Updating Store Submission Release Notes..."
           Write-Host "=========================================================="
 
-          $releaseNotes = @"
-What's New in Luminark v1.1.0:
-- Monitor Video Input Switching (DDC/CI): Switch inputs (HDMI, DisplayPort, USB-C) from the mini flyout with safety countdown and instant cancel.
-- Hardware Audio Volume & Mute: Adjust monitor speaker volume and mute external displays directly from the flyout.
-- Custom Monitor Renaming: Assign custom names to monitors with persistent hardware IDs surviving reconnects and reboots.
-- Intelligent Display Auto-Detection: Progressive multi-stage detection pipeline (2s, 4s, 6s) and WM_DEVICECHANGE hardware hook for reliable USB-C / DisplayPort Alt Mode hotplug discovery.
-- Global Keyboard Shortcuts: Customizable hotkeys for Dark Mode (Ctrl+Alt+D), Light Mode (Ctrl+Alt+L), and Toggle Theme (Ctrl+Alt+T).
-- Windows 11 Integration: Added official Luminark icon in Windows Installed Apps and updated publisher to Silviu Vlasceanu.
-- Efficiency: 0.0% idle CPU and ~1-5 MB memory footprint.
-"@
+          $releaseNotes = @(
+            "What's New in Luminark v1.1.0:",
+            "- Monitor Video Input Switching (DDC/CI): Switch inputs (HDMI, DisplayPort, USB-C) from the mini flyout with safety countdown and instant cancel.",
+            "- Hardware Audio Volume & Mute: Adjust monitor speaker volume and mute external displays directly from the flyout.",
+            "- Custom Monitor Renaming: Assign custom names to monitors with persistent hardware IDs surviving reconnects and reboots.",
+            "- Intelligent Display Auto-Detection: Progressive multi-stage detection pipeline (2s, 4s, 6s) and WM_DEVICECHANGE hardware hook for reliable USB-C / DisplayPort Alt Mode hotplug discovery.",
+            "- Global Keyboard Shortcuts: Customizable hotkeys for Dark Mode (Ctrl+Alt+D), Light Mode (Ctrl+Alt+L), and Toggle Theme (Ctrl+Alt+T).",
+            "- Windows 11 Integration: Added official Luminark icon in Windows Installed Apps and updated publisher to Silviu Vlasceanu.",
+            "- Efficiency: 0.0% idle CPU and ~1-5 MB memory footprint."
+          ) -join "`n"
 
           try {
             Write-Host "Retrieving current draft submission from Partner Center..."
