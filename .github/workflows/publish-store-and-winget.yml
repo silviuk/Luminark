@@ -214,14 +214,13 @@ jobs:
             "- Efficiency: 0.0% idle CPU and ~1-5 MB memory footprint."
           ) -join "`n"
 
+          $notesUpdated = $false
           try {
             Write-Host "Retrieving current draft submission from Partner Center..."
             $submissionRaw = msstore submission get $env:APP_ID
             $submissionText = ($submissionRaw -join "`n")
-            Write-Host "Raw response from msstore submission get:"
-            Write-Host $submissionText
 
-            # Extract JSON payload if CLI output includes banner or headers
+            # Extract JSON payload
             $jsonStart = $submissionText.IndexOf('{')
             $jsonEnd = $submissionText.LastIndexOf('}')
             if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
@@ -229,29 +228,57 @@ jobs:
               $submissionObj = $jsonString | ConvertFrom-Json
               if ($submissionObj -and $submissionObj.listings) {
                 foreach ($lang in $submissionObj.listings.PSObject.Properties) {
-                  Write-Host "Found listing for language: $($lang.Name)"
+                  Write-Host "Processing listing for language: $($lang.Name)"
                   if ($lang.Value.baseListing) {
                     $lang.Value.baseListing.releaseNotes = $releaseNotes
                     Write-Host "Set releaseNotes on $($lang.Name).baseListing"
+
+                    # Ensure ShortDescription meets Store limit (<= 500 characters)
+                    if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
+                      Write-Host "Shortening $($lang.Name).baseListing.shortDescription from $($lang.Value.baseListing.shortDescription.Length) to <500 chars for Store compliance."
+                      $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
+                    }
                   }
                 }
+
                 $updateFile = "submission_update.json"
-                $submissionObj | ConvertTo-Json -Depth 20 | Out-File -FilePath $updateFile -Encoding utf8
-                Write-Host "Applying updated submission with release notes to Partner Center..."
-                msstore submission update $env:APP_ID $updateFile
+                $submissionObj | ConvertTo-Json -Depth 20 | Out-File -FilePath $updateFile -Encoding utf8 -NoNewline
+
+                Write-Host "Applying updated submission with release notes via msstore-cli..."
+                msstore submission update $env:APP_ID $updateFile -v
                 if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Successfully updated release notes in Microsoft Store submission draft!"
+                  Write-Host "✅ Successfully updated release notes in Microsoft Store submission draft via msstore-cli!"
+                  $notesUpdated = $true
                 } else {
-                  Write-Warning "msstore submission update exited with code $LASTEXITCODE"
+                  Write-Warning "msstore submission update exited with code $LASTEXITCODE. Trying direct DevCenter REST API..."
+
+                  # Direct Partner Center DevCenter REST API PUT fallback
+                  try {
+                    $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body @{
+                      grant_type    = "client_credentials"
+                      client_id     = $env:CLIENT_ID
+                      client_secret = $env:CLIENT_SECRET
+                      scope         = "https://manage.devcenter.microsoft.com/.default"
+                    }
+                    $subId = $submissionObj.id
+                    $headers = @{
+                      "Authorization" = "Bearer $($tokenResp.access_token)"
+                      "Content-Type"  = "application/json"
+                      "Accept"        = "application/json"
+                    }
+                    $putUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId"
+                    $jsonPayload = [System.IO.File]::ReadAllText((Resolve-Path $updateFile).Path, [System.Text.Encoding]::UTF8)
+                    $putResp = Invoke-RestMethod -Method Put -Uri $putUri -Headers $headers -Body $jsonPayload
+                    Write-Host "✅ Successfully updated submission release notes via DevCenter REST API! Submission Status: $($putResp.status)"
+                    $notesUpdated = $true
+                  } catch {
+                    Write-Warning "Direct DevCenter REST API call failed: $_"
+                    if ($_.ErrorDetails) {
+                      Write-Warning "Error Details: $($_.ErrorDetails.Message)"
+                    }
+                  }
                 }
-              } else {
-                Write-Host "No listings property found in submission JSON. Attempting module-specific get..."
-                $listingsRaw = msstore submission get $env:APP_ID -m listings
-                $listingsText = ($listingsRaw -join "`n")
-                Write-Host "Listings module raw: $listingsText"
               }
-            } else {
-              Write-Host "No JSON object found in submission get output."
             }
           } catch {
             Write-Warning "Error while updating store submission release notes: $_"
@@ -278,7 +305,13 @@ jobs:
             Write-Host "   $($steps.release_info.outputs.installer_url)"
             Write-Host "3. Silent install command: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
             Write-Host "=========================================================="
-            "store_status=Win32 EXE release ready (Requires MSIX for CLI upload or URL submission in Partner Center)" >> $env:GITHUB_OUTPUT
+            $statusMsg = if ($notesUpdated) {
+              "Win32 EXE release ready (Draft release notes updated in Microsoft Partner Center)"
+            } else {
+              "Win32 EXE release ready (Requires MSIX for CLI upload or URL submission in Partner Center)"
+            }
+            "store_status=$statusMsg" >> $env:GITHUB_OUTPUT
+            $global:LASTEXITCODE = 0
           } else {
             Write-Error "No installer package (.msix or .exe) found in release assets."
             "store_status=Failed (No installer found)" >> $env:GITHUB_OUTPUT
