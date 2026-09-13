@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag to build and attach assets to (e.g. v1.1.0)'
+        required: false
+        default: 'v1.1.0'
 
 permissions:
   contents: write
@@ -39,15 +44,32 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Luminark.iss
 
+      - name: Build MSIX Package
+        shell: pwsh
+        run: |
+          $msixLayout = "msix-layout"
+          New-Item -ItemType Directory -Force -Path $msixLayout
+          Copy-Item -Recurse -Force publish/* $msixLayout/
+          Copy-Item -Force installer/msix/AppxManifest.xml $msixLayout/AppxManifest.xml
+          Copy-Item -Recurse -Force installer/msix/Assets $msixLayout/Assets
+
+          $makeappx = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          Write-Host "Using makeappx: $makeappx"
+
+          $msixOut = "installer/Output/Luminark-1.1.0.0-x64.msix"
+          & $makeappx pack /d $msixLayout /p $msixOut /nv
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Luminark ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: Luminark ${{ inputs.release_tag || github.ref_name }}
           files: |
             installer/Output/Luminark-Setup-*.exe
+            installer/Output/Luminark-*.msix
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
