@@ -127,8 +127,8 @@ namespace Lumina
                 {
                     try
                     {
-                        var activatedArgs = Windows.ApplicationModel.AppInstance.GetActivatedEventArgs();
-                        if (activatedArgs != null && activatedArgs.Kind == Windows.ApplicationModel.Activation.ActivationKind.StartupTask)
+                        var activatedArgs = global::Windows.ApplicationModel.AppInstance.GetActivatedEventArgs();
+                        if (activatedArgs != null && activatedArgs.Kind == global::Windows.ApplicationModel.Activation.ActivationKind.StartupTask)
                         {
                             isStartupTask = true;
                             Log("[App] Launched via Windows StartupTask -> starting minimized");

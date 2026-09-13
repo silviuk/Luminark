@@ -64,9 +64,9 @@ namespace Lumina.Services
             {
                 try
                 {
-                    var task = Windows.ApplicationModel.StartupTask.GetAsync("LuminarkStartup").AsTask().GetAwaiter().GetResult();
-                    settings.StartWithWindows = (task.State == Windows.ApplicationModel.StartupTaskState.Enabled ||
-                                                 task.State == Windows.ApplicationModel.StartupTaskState.EnabledByPolicy);
+                    var task = global::Windows.ApplicationModel.StartupTask.GetAsync("LuminarkStartup").AsTask().GetAwaiter().GetResult();
+                    settings.StartWithWindows = (task.State == global::Windows.ApplicationModel.StartupTaskState.Enabled ||
+                                                 task.State == global::Windows.ApplicationModel.StartupTaskState.EnabledByPolicy);
                 }
                 catch (Exception ex)
                 {
@@ -115,10 +115,10 @@ namespace Lumina.Services
             {
                 try
                 {
-                    var task = Windows.ApplicationModel.StartupTask.GetAsync("LuminarkStartup").AsTask().GetAwaiter().GetResult();
+                    var task = global::Windows.ApplicationModel.StartupTask.GetAsync("LuminarkStartup").AsTask().GetAwaiter().GetResult();
                     if (enable)
                     {
-                        if (task.State == Windows.ApplicationModel.StartupTaskState.Disabled)
+                        if (task.State == global::Windows.ApplicationModel.StartupTaskState.Disabled)
                         {
                             var state = task.RequestEnableAsync().AsTask().GetAwaiter().GetResult();
                             App.Log($"[Startup] Packaged StartupTask RequestEnableAsync result: {state}");
