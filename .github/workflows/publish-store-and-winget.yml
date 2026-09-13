@@ -1,0 +1,237 @@
+name: Publish to Microsoft Store and WinGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'GitHub Release Tag to publish (e.g. v1.0.4). Leave blank for latest release.'
+        required: false
+        default: ''
+        type: string
+      publish_winget:
+        description: 'Publish update to WinGet (microsoft/winget-pkgs)'
+        required: true
+        default: true
+        type: boolean
+      publish_store:
+        description: 'Publish update to Windows Store (Microsoft Partner Center)'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Step 1: Resolve Release Info & Download Assets
+      # -----------------------------------------------------------------------
+      - name: Resolve Release Information and Assets
+        id: release_info
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Write-Host "Resolving GitHub Release details..."
+          $inputTag = "${{ inputs.release_tag }}".Trim()
+
+          if ([string]::IsNullOrWhiteSpace($inputTag)) {
+            Write-Host "No release tag supplied. Querying latest release..."
+            $releaseJson = gh release view --json tagName,name,assets
+          } else {
+            Write-Host "Querying release tag: $inputTag..."
+            $releaseJson = gh release view $inputTag --json tagName,name,assets
+          }
+
+          $release = $releaseJson | ConvertFrom-Json
+          $tag = $release.tagName
+          $version = $tag.TrimStart('v')
+
+          Write-Host "Target Release Tag: $tag (Version: $version)"
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+          # Create directory and download all release artifacts
+          New-Item -ItemType Directory -Path "release-assets" -Force | Out-Null
+          gh release download $tag --dir release-assets
+
+          $exeAsset = Get-ChildItem -Path release-assets -Filter "*.exe" | Select-Object -First 1
+          $msixAsset = Get-ChildItem -Path release-assets -Filter "*.msix" | Select-Object -First 1
+
+          if ($exeAsset) {
+            Write-Host "Found Setup Executable: $($exeAsset.Name)"
+            "exe_path=$($exeAsset.FullName)" >> $env:GITHUB_OUTPUT
+            "exe_name=$($exeAsset.Name)" >> $env:GITHUB_OUTPUT
+            $installerUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/$($exeAsset.Name)"
+            "installer_url=$installerUrl" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Warning "No .exe installer file found in release assets."
+          }
+
+          if ($msixAsset) {
+            Write-Host "Found MSIX Package: $($msixAsset.Name)"
+            "msix_path=$($msixAsset.FullName)" >> $env:GITHUB_OUTPUT
+            "msix_name=$($msixAsset.Name)" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Warning "No .msix package file found in release assets."
+          }
+
+      # -----------------------------------------------------------------------
+      # Step 2: Publish to Windows Package Manager (WinGet)
+      # -----------------------------------------------------------------------
+      - name: Publish to WinGet
+        if: ${{ inputs.publish_winget }}
+        id: winget
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          TAG: ${{ steps.release_info.outputs.tag }}
+          VERSION: ${{ steps.release_info.outputs.version }}
+          INSTALLER_URL: ${{ steps.release_info.outputs.installer_url }}
+        run: |
+          Write-Host "=========================================================="
+          Write-Host "Starting WinGet Publication (Package: silviuk.Luminark)"
+          Write-Host "=========================================================="
+
+          if (-not $env:WINGET_TOKEN) {
+            Write-Warning "::warning::WINGET_TOKEN secret is not configured in this repository. Skipping WinGet update. Add a GitHub Personal Access Token (PAT) with 'public_repo' scope to repository secrets as WINGET_TOKEN."
+            "winget_status=Skipped (Missing WINGET_TOKEN secret)" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          if (-not $env:INSTALLER_URL) {
+            Write-Error "Cannot publish to WinGet: No installer executable URL found in release assets."
+            "winget_status=Failed (No installer URL)" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
+          Write-Host "Downloading Microsoft Windows Package Manager Manifest Creator (wingetcreate)..."
+          $wcUrl = "https://github.com/microsoft/winget-create/releases/latest/download/wingetcreate.exe"
+          Invoke-WebRequest -Uri $wcUrl -OutFile "wingetcreate.exe"
+
+          Write-Host "Submitting manifest update to microsoft/winget-pkgs..."
+          Write-Host "Package ID: silviuk.Luminark"
+          Write-Host "Version:    $env:VERSION"
+          Write-Host "URL:        $env:INSTALLER_URL"
+
+          try {
+            .\wingetcreate.exe update --submit --token $env:WINGET_TOKEN --urls $env:INSTALLER_URL --version $env:VERSION silviuk.Luminark
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Successfully submitted WinGet manifest update PR!"
+              "winget_status=Submitted PR successfully via wingetcreate" >> $env:GITHUB_OUTPUT
+            } else {
+              Write-Warning "wingetcreate exited with code $LASTEXITCODE. If the initial package PR is still open/pending merge in microsoft/winget-pkgs, subsequent updates cannot be submitted until that initial PR is merged."
+              "winget_status=Exited with code $LASTEXITCODE (Check PR status)" >> $env:GITHUB_OUTPUT
+            }
+          } catch {
+            Write-Error "Error during wingetcreate execution: $_"
+            "winget_status=Error: $_" >> $env:GITHUB_OUTPUT
+          }
+
+      # -----------------------------------------------------------------------
+      # Step 3: Publish to Windows Store (Microsoft Partner Center)
+      # -----------------------------------------------------------------------
+      - name: Setup Microsoft Store Developer CLI
+        if: ${{ inputs.publish_store }}
+        uses: microsoft/microsoft-store-apppublisher@v1
+
+      - name: Publish to Microsoft Store
+        if: ${{ inputs.publish_store }}
+        id: msstore
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.MS_STORE_TENANT_ID }}
+          SELLER_ID: ${{ secrets.MS_STORE_SELLER_ID }}
+          CLIENT_ID: ${{ secrets.MS_STORE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
+          APP_ID: ${{ secrets.MS_STORE_APP_ID }}
+          MSIX_PATH: ${{ steps.release_info.outputs.msix_path }}
+        run: |
+          Write-Host "=========================================================="
+          Write-Host "Starting Microsoft Store Publication"
+          Write-Host "=========================================================="
+
+          $missingSecrets = @()
+          if (-not $env:TENANT_ID) { $missingSecrets += "MS_STORE_TENANT_ID" }
+          if (-not $env:SELLER_ID) { $missingSecrets += "MS_STORE_SELLER_ID" }
+          if (-not $env:CLIENT_ID) { $missingSecrets += "MS_STORE_CLIENT_ID" }
+          if (-not $env:CLIENT_SECRET) { $missingSecrets += "MS_STORE_CLIENT_SECRET" }
+          if (-not $env:APP_ID) { $missingSecrets += "MS_STORE_APP_ID" }
+
+          if ($missingSecrets.Count -gt 0) {
+            $list = $missingSecrets -join ", "
+            Write-Warning "::warning::Microsoft Store credentials are missing ($list). Skipping Windows Store publication. Add these secrets in GitHub Repo Settings > Secrets and variables > Actions."
+            "store_status=Skipped (Missing secrets: $list)" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          if (-not $env:MSIX_PATH -or -not (Test-Path $env:MSIX_PATH)) {
+            Write-Error "No .msix package found in release assets for Windows Store submission."
+            "store_status=Failed (No MSIX file in release)" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
+          Write-Host "Configuring Microsoft Store Developer CLI credentials..."
+          msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "msstore reconfigure failed with exit code $LASTEXITCODE"
+            "store_status=msstore reconfigure failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
+          Write-Host "Publishing MSIX package ($env:MSIX_PATH) to Store Product ID: $env:APP_ID..."
+          msstore publish $env:MSIX_PATH -id $env:APP_ID -v
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Successfully published package to Microsoft Store!"
+            "store_status=Published successfully via msstore-cli" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Error "msstore publish failed with exit code $LASTEXITCODE"
+            "store_status=msstore publish failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
+      # -----------------------------------------------------------------------
+      # Step 4: Step Summary
+      # -----------------------------------------------------------------------
+      - name: Generate Workflow Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.release_info.outputs.tag }}"
+          $version = "${{ steps.release_info.outputs.version }}"
+          $wingetStatus = "${{ steps.winget.outputs.winget_status }}"
+          if (-not $wingetStatus) { $wingetStatus = if ("${{ inputs.publish_winget }}" -eq "true") { "Executed" } else { "Disabled" } }
+          $storeStatus = "${{ steps.msstore.outputs.store_status }}"
+          if (-not $storeStatus) { $storeStatus = if ("${{ inputs.publish_store }}" -eq "true") { "Executed" } else { "Disabled" } }
+
+          $summary = @"
+          ## 🚀 Publish to Store & WinGet Summary
+
+          - **Target Release**: `$tag` (Version: `$version`)
+          - **WinGet Target**: ``silviuk.Luminark``
+          - **WinGet Status**: $wingetStatus
+          - **Windows Store Status**: $storeStatus
+
+          ---
+          ### 🔑 Repository Secrets Reference
+          To enable automated publication, configure the following secrets under **Settings > Secrets and variables > Actions**:
+
+          | Secret Name | Purpose | How to obtain |
+          |---|---|---|
+          | ``WINGET_TOKEN`` | Submitting manifest PR to ``microsoft/winget-pkgs`` | GitHub Personal Access Token (PAT) with ``public_repo`` scope |
+          | ``MS_STORE_TENANT_ID`` | Azure AD / Entra ID Tenant ID | Entra ID Overview or Partner Center |
+          | ``MS_STORE_SELLER_ID`` | Partner Center Publisher / Seller ID | Partner Center Account Settings > Identifiers |
+          | ``MS_STORE_CLIENT_ID`` | Entra ID App Registration Client ID | Azure Entra ID App Registrations |
+          | ``MS_STORE_CLIENT_SECRET`` | Entra ID App Registration Client Secret | Azure Entra ID App Registrations > Certificates & secrets |
+          | ``MS_STORE_APP_ID`` | Microsoft Store Product ID | Partner Center Product Overview (e.g. 9NCJG5RVRR1C) |
+          "@
+
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

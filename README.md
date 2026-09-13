@@ -5,7 +5,7 @@
 [![Platform: Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/silviuk/Luminark)
 [![Runtime: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v1.0.1](https://img.shields.io/badge/Release-v1.0.1-orange)](https://github.com/silviuk/Luminark/releases/latest)
+[![Release: v1.0.4](https://img.shields.io/badge/Release-v1.0.4-orange)](https://github.com/silviuk/Luminark/releases/latest)
 
 **Luminark** is a native Windows 11 desktop application designed to unify and automate your display environment. It dynamically synchronizes Windows system and app themes with scheduled day/night times or Windows Night Light, provides direct hardware multi-monitor brightness control via **DDC/CI** and **WMI**, and offers intuitive system tray gestures for effortless control.
 
@@ -101,11 +101,38 @@ dotnet publish Luminark.csproj -c Release -o installer\publish
 - **UI Design**: [WPF-UI](https://github.com/lepoco/wpfui) (Windows 11 Fluent Design System)
 - **Hardware & Windows APIs**:
   - `dxva2.dll`: `GetMonitorBrightness`, `SetMonitorBrightness`, `GetPhysicalMonitorsFromHMONITOR`
-  - `user32.dll`: `WH_MOUSE_LL` low-level mouse hook, `LockWorkStation`, `SendMessageTimeout`, `PostMessage` (`SC_MONITORPOWER`)
+  - `user32.dll`: `WH_MOUSE_LL` low-level mouse hook, `LockWorkStation`, `SendMessageTimeout`, `PostMessage` (`SC_MONITORPOWER`), `RegisterHotKey`
   - `kernel32.dll`: `SetThreadExecutionState` (`ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED`)
   - `shell32.dll`: `Shell_NotifyIconGetRect` bounding box query
   - `root\wmi`: `WmiMonitorBrightnessMethods` for internal laptop screens
   - Windows Registry: `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
+
+---
+
+## 🌐 Store & WinGet Publishing
+
+Luminark includes a dedicated GitHub Action workflow (`.github/workflows/publish-store-and-winget.yml`) that can be manually dispatched to publish any release directly to the **Windows Store** and **WinGet**:
+
+### How to Trigger:
+1. Go to your repository on GitHub and click the **Actions** tab.
+2. Select the **"Publish to Microsoft Store and WinGet"** workflow on the left sidebar.
+3. Click **"Run workflow"**:
+   - **Release Tag**: Leave empty to auto-detect and publish the latest release, or specify a tag (e.g. `v1.0.4`).
+   - **Publish to WinGet**: Checkbox (default: enabled).
+   - **Publish to Windows Store**: Checkbox (default: enabled).
+4. Click **"Run workflow"**.
+
+### Required Repository Secrets:
+Configure these under **Settings > Secrets and variables > Actions**:
+
+| Secret | Purpose | Source |
+|---|---|---|
+| `WINGET_TOKEN` | Submits manifest pull requests to `microsoft/winget-pkgs` | GitHub Personal Access Token (classic with `public_repo` scope) |
+| `MS_STORE_TENANT_ID` | Azure AD / Entra ID Tenant ID | Azure Portal / Entra ID Overview |
+| `MS_STORE_SELLER_ID` | Partner Center Publisher / Seller ID | Partner Center Account Settings > Identifiers |
+| `MS_STORE_CLIENT_ID` | Azure AD App Registration (Client ID) | Entra ID App Registrations |
+| `MS_STORE_CLIENT_SECRET` | Azure AD App Registration Secret | Entra ID App Registrations > Certificates & secrets |
+| `MS_STORE_APP_ID` | Product ID in Partner Center | Partner Center Product Overview |
 
 ---
 

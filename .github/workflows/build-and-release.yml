@@ -1,4 +1,4 @@
-﻿name: Build and Release
+name: Build and Release
 
 on:
   push:
@@ -31,14 +31,15 @@ jobs:
 
       - name: Compile Inno Setup Installer
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Lumina.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Luminark.iss
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: Lumina ${{ github.ref_name }}
-          files: installer/Output/Lumina-Setup-*.exe
+          name: Luminark ${{ github.ref_name }}
+          files: |
+            installer/Output/Luminark-Setup-*.exe
           draft: false
           prerelease: false
           generate_release_notes: true
