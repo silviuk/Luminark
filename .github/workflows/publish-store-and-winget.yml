@@ -274,9 +274,39 @@ jobs:
                     Write-Host "✅ Successfully updated submission release notes via DevCenter REST API! Submission Status: $($putResp.status)"
                     $notesUpdated = $true
                   } catch {
-                    Write-Warning "Direct DevCenter REST API call failed: $_"
-                    if ($_.ErrorDetails) {
-                      Write-Warning "Error Details: $($_.ErrorDetails.Message)"
+                    $errText = "$_ $($_.ErrorDetails.Message)"
+                    Write-Warning "Direct DevCenter REST API call failed: $errText"
+                    if ($errText -match "state 'None'" -or $errText -match "delete the submission and create a new one") {
+                      Write-Host "Detected submission in state 'None'. Deleting old submission and creating a fresh draft as requested by Partner Center..."
+                      try {
+                        Invoke-RestMethod -Method Delete -Uri $putUri -Headers $headers
+                        Write-Host "Deleted draft submission $subId."
+                        Start-Sleep -Seconds 2
+
+                        $createUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
+                        $newSub = Invoke-RestMethod -Method Post -Uri $createUri -Headers $headers
+                        $newSubId = $newSub.id
+                        Write-Host "Created new draft submission: $newSubId"
+
+                        $newGetUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$newSubId"
+                        $freshSub = Invoke-RestMethod -Method Get -Uri $newGetUri -Headers $headers
+
+                        foreach ($lang in $freshSub.listings.PSObject.Properties) {
+                          if ($lang.Value.baseListing) {
+                            $lang.Value.baseListing.releaseNotes = $releaseNotes
+                            if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
+                              $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
+                            }
+                          }
+                        }
+
+                        $freshPayload = $freshSub | ConvertTo-Json -Depth 20
+                        $freshPutResp = Invoke-RestMethod -Method Put -Uri $newGetUri -Headers $headers -Body $freshPayload
+                        Write-Host "✅ Successfully updated release notes on newly created draft submission $newSubId! Status: $($freshPutResp.status)"
+                        $notesUpdated = $true
+                      } catch {
+                        Write-Warning "Re-creation of draft submission failed: $_ $($_.ErrorDetails.Message)"
+                      }
                     }
                   }
                 }
