@@ -5,7 +5,7 @@
 [![Platform: Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/silviuk/Luminark)
 [![Runtime: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v1.0.6](https://img.shields.io/badge/Release-v1.0.6-orange)](https://github.com/silviuk/Luminark/releases/latest)
+[![Release: v1.0.7](https://img.shields.io/badge/Release-v1.0.7-orange)](https://github.com/silviuk/Luminark/releases/latest)
 
 **Luminark** is a native Windows 11 desktop application designed to unify and automate your display environment. It dynamically synchronizes Windows system and app themes with scheduled day/night times or Windows Night Light, provides direct hardware multi-monitor brightness control via **DDC/CI** and **WMI**, and offers intuitive system tray gestures for effortless control.
 
@@ -138,4 +138,4 @@ Configure these under **Settings > Secrets and variables > Actions**:
 
 ## 📄 License
 
-Distributed under the [MIT License](LICENSE). Copyright © 2026 Silviu K.
+Distributed under the [MIT License](LICENSE). Copyright © 2026 Silviu Vlasceanu.

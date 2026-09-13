@@ -2,8 +2,8 @@
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Luminark"
-#define MyAppVersion "1.0.6"
-#define MyAppPublisher "Silviu K"
+#define MyAppVersion "1.0.7"
+#define MyAppPublisher "Silviu Vlasceanu"
 #define MyAppURL "https://github.com/silviuk/Luminark"
 #define MyAppExeName "Luminark.exe"
 
@@ -22,6 +22,7 @@ AllowNoIcons=yes
 OutputDir=Output
 OutputBaseFilename=Luminark-Setup-v{#MyAppVersion}
 SetupIconFile=..\assets\app.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern dynamic

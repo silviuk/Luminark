@@ -10,10 +10,11 @@
     <ApplicationTitle>Luminark</ApplicationTitle>
     <AssemblyName>Luminark</AssemblyName>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <AssemblyVersion>1.0.6.0</AssemblyVersion>
-    <FileVersion>1.0.6.0</FileVersion>
-    <Version>1.0.6</Version>
-    <Company>Silviu K</Company>
+    <AssemblyVersion>1.0.7.0</AssemblyVersion>
+    <FileVersion>1.0.7.0</FileVersion>
+    <Version>1.0.7</Version>
+    <Company>Silviu Vlasceanu</Company>
+    <Authors>Silviu Vlasceanu</Authors>
     <Product>Luminark</Product>
     <Description>Dynamic Windows 11 Theme, Night Light &amp; Multi-Monitor Brightness Controller</Description>
     <Copyright>Copyright © 2026</Copyright>
