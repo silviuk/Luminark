@@ -82,7 +82,34 @@ namespace Lumina.Services
 
                                         if (hasBrightness)
                                         {
-                                            results.Add(new MonitorInfo
+                                            uint volPvct = 0, curVol = 50, maxVol = 100;
+                                            bool hasAudio = false;
+                                            try
+                                            {
+                                                hasAudio = NativeMethods.GetVCPFeatureAndVCPFeatureReply(pm.hPhysicalMonitor, 0x62, out volPvct, out curVol, out maxVol);
+                                            }
+                                            catch { }
+
+                                            uint mutePvct = 0, curMute = 0, maxMute = 0;
+                                            bool hasMute = false;
+                                            if (hasAudio)
+                                            {
+                                                try
+                                                {
+                                                    hasMute = NativeMethods.GetVCPFeatureAndVCPFeatureReply(pm.hPhysicalMonitor, 0x8D, out mutePvct, out curMute, out maxMute);
+                                                }
+                                                catch { }
+                                            }
+
+                                            uint inPvct = 0, curInput = 0, maxInput = 0;
+                                            bool hasInput = false;
+                                            try
+                                            {
+                                                hasInput = NativeMethods.GetVCPFeatureAndVCPFeatureReply(pm.hPhysicalMonitor, 0x60, out inPvct, out curInput, out maxInput);
+                                            }
+                                            catch { }
+
+                                            var mon = new MonitorInfo
                                             {
                                                 Id = $"DDC_{pm.hPhysicalMonitor}_{monitorIndex}",
                                                 DeviceName = desc,
@@ -91,8 +118,45 @@ namespace Lumina.Services
                                                 PhysicalHandle = pm.hPhysicalMonitor,
                                                 MinBrightness = min,
                                                 MaxBrightness = max,
-                                                CurrentBrightness = cur
-                                            });
+                                                CurrentBrightness = cur,
+                                                SupportsAudioVolume = hasAudio,
+                                                SupportsAudioMute = hasMute,
+                                                MinVolume = 0,
+                                                MaxVolume = maxVol > 0 ? maxVol : 100,
+                                                CurrentVolume = hasAudio ? curVol : 50,
+                                                IsMuted = hasMute && curMute == 1,
+                                                SupportsInputSelect = true
+                                            };
+
+                                            var standardInputs = GetStandardInputOptions();
+                                            bool currentInList = false;
+                                            foreach (var opt in standardInputs)
+                                            {
+                                                mon.InputOptions.Add(opt);
+                                                if (hasInput && opt.Code == curInput)
+                                                {
+                                                    currentInList = true;
+                                                }
+                                            }
+
+                                            if (hasInput && curInput > 0 && !currentInList)
+                                            {
+                                                var customOpt = new MonitorInputOption { Code = curInput, Name = $"Input (0x{curInput:X2})" };
+                                                mon.InputOptions.Add(customOpt);
+                                            }
+
+                                            if (hasInput && curInput > 0)
+                                            {
+                                                mon.ActiveInputCode = curInput;
+                                                mon.SelectedInputCode = curInput;
+                                            }
+                                            else if (mon.InputOptions.Count > 0)
+                                            {
+                                                mon.ActiveInputCode = mon.InputOptions[0].Code;
+                                                mon.SelectedInputCode = mon.InputOptions[0].Code;
+                                            }
+
+                                            results.Add(mon);
                                         }
                                     }
                                 }
@@ -215,6 +279,91 @@ namespace Lumina.Services
             foreach (var mon in monitors)
             {
                 SetBrightness(mon, brightness);
+            }
+        }
+
+        public static List<MonitorInputOption> GetStandardInputOptions()
+        {
+            return new List<MonitorInputOption>
+            {
+                new MonitorInputOption { Code = 0x11, Name = "HDMI 1" },
+                new MonitorInputOption { Code = 0x12, Name = "HDMI 2" },
+                new MonitorInputOption { Code = 0x0F, Name = "DisplayPort 1" },
+                new MonitorInputOption { Code = 0x10, Name = "DisplayPort 2" },
+                new MonitorInputOption { Code = 0x13, Name = "USB-C" },
+                new MonitorInputOption { Code = 0x03, Name = "DVI 1" },
+                new MonitorInputOption { Code = 0x01, Name = "VGA 1" }
+            };
+        }
+
+        public bool SetInputSource(MonitorInfo monitor, uint inputCode)
+        {
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero)
+                return false;
+
+            try
+            {
+                App.Log($"[MonitorService] Setting input on {monitor.FriendlyName} to 0x{inputCode:X2}...");
+                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, inputCode);
+                App.Log($"[MonitorService] SetVCPFeature (0x60, 0x{inputCode:X2}) result: {ok}");
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MonitorService] Failed to set input on {monitor.FriendlyName}: {ex.Message}");
+                return false;
+            }
+        }
+
+        public void SetVolume(MonitorInfo monitor, uint volume, bool isMuted = false)
+        {
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.SupportsAudioVolume)
+                return;
+
+            volume = Math.Clamp(volume, monitor.MinVolume, monitor.MaxVolume);
+
+            lock (_debounceTokens)
+            {
+                string key = monitor.Id + "_vol";
+                if (_debounceTokens.TryGetValue(key, out var oldCts))
+                {
+                    oldCts.Cancel();
+                    oldCts.Dispose();
+                }
+
+                var cts = new CancellationTokenSource();
+                _debounceTokens[key] = cts;
+
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(40, cts.Token);
+                        if (cts.Token.IsCancellationRequested) return;
+
+                        if (isMuted)
+                        {
+                            if (monitor.SupportsAudioMute)
+                            {
+                                NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x8D, 1);
+                            }
+                            NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x62, 0);
+                        }
+                        else
+                        {
+                            if (monitor.SupportsAudioMute)
+                            {
+                                NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x8D, 2);
+                            }
+                            NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x62, volume);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                    catch (Exception ex)
+                    {
+                        App.Log($"[MonitorService] Failed to set volume on {monitor.FriendlyName}: {ex.Message}");
+                    }
+                }, cts.Token);
             }
         }
 

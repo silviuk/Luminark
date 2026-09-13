@@ -26,7 +26,32 @@ namespace Lumina
                 {
                     Hide();
                     _viewModel.CancelLockCountdown();
+                    _viewModel.CancelAllInputSwitches();
                     MainWindow.TrimMemory();
+                }
+            };
+
+            PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == System.Windows.Input.Key.Escape)
+                {
+                    if (_viewModel.HasActiveInputSwitch)
+                    {
+                        _viewModel.CancelAllInputSwitches();
+                        e.Handled = true;
+                        return;
+                    }
+                    if (_viewModel.IsLockingCountdown)
+                    {
+                        _viewModel.CancelLockCountdown();
+                        e.Handled = true;
+                        return;
+                    }
+                    Hide();
+                    _viewModel.CancelLockCountdown();
+                    _viewModel.CancelAllInputSwitches();
+                    MainWindow.TrimMemory();
+                    e.Handled = true;
                 }
             };
 
@@ -68,6 +93,7 @@ namespace Lumina
             {
                 Hide();
                 _viewModel.CancelLockCountdown();
+                _viewModel.CancelAllInputSwitches();
                 MainWindow.TrimMemory();
             }
             else
@@ -171,6 +197,26 @@ namespace Lumina
             if (sender is FrameworkElement el && el.Tag is string tagStr && uint.TryParse(tagStr, out uint val))
             {
                 _viewModel.MasterBrightness = val;
+            }
+        }
+
+        private void OnToggleMonitorMuteClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Lumina.Models.MonitorInfo monitor)
+            {
+                monitor.ToggleMute();
+            }
+        }
+
+        private void OnCancelInputSwitchClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Lumina.Models.MonitorInfo monitor)
+            {
+                monitor.CancelInputSwitch();
+            }
+            else
+            {
+                _viewModel.CancelAllInputSwitches();
             }
         }
     }

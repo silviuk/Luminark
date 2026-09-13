@@ -216,6 +216,30 @@ namespace Lumina.ViewModels
                         _isUpdatingIndividualBrightness = false;
                     }
                 };
+                mon.OnVolumeChanged = (m, vol, muted) =>
+                {
+                    _monitorService.SetVolume(m, vol, muted);
+                };
+
+                mon.OnInputSelectionRequested = (m, targetCode) =>
+                {
+                    if (!targetCode.HasValue) return;
+
+                    if (m.ActiveInputCode.HasValue && targetCode.Value == m.ActiveInputCode.Value)
+                    {
+                        m.CancelInputSwitch();
+                        return;
+                    }
+
+                    var opt = m.InputOptions.FirstOrDefault(o => o.Code == targetCode.Value);
+                    string targetName = opt?.Name ?? $"Input (0x{targetCode.Value:X2})";
+
+                    m.StartInputCountdown(targetCode.Value, targetName, (monitorToSwitch, code) =>
+                    {
+                        _monitorService.SetInputSource(monitorToSwitch, code);
+                    });
+                };
+
                 Monitors.Add(mon);
             }
 
@@ -226,6 +250,16 @@ namespace Lumina.ViewModels
             OnPropertyChanged(nameof(MasterBrightness));
             OnPropertyChanged(nameof(MasterBrightnessText));
             OnPropertyChanged(nameof(ConnectedMonitorsCountText));
+        }
+
+        public bool HasActiveInputSwitch => Monitors.Any(m => m.IsSwitchingInput);
+
+        public void CancelAllInputSwitches()
+        {
+            foreach (var mon in Monitors)
+            {
+                mon.CancelInputSwitch();
+            }
         }
 
         public void SetIndividualBrightness(MonitorInfo monitor, uint brightness)

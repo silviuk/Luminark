@@ -90,6 +90,20 @@ namespace Lumina.Services
             IntPtr hMonitor,
             uint dwNewBrightness);
 
+        [DllImport("dxva2.dll", SetLastError = true)]
+        public static extern bool GetVCPFeatureAndVCPFeatureReply(
+            IntPtr hMonitor,
+            byte bVCPCode,
+            out uint pvct,
+            out uint pdwCurrentValue,
+            out uint pdwMaximumValue);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        public static extern bool SetVCPFeature(
+            IntPtr hMonitor,
+            byte bVCPCode,
+            uint dwNewValue);
+
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessageTimeout(
             IntPtr hWnd,
