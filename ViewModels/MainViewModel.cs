@@ -46,10 +46,12 @@ namespace Lumina.ViewModels
             try
             {
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+                Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+                Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
             }
             catch (Exception ex)
             {
-                App.Log($"[MainViewModel] Could not hook DisplaySettingsChanged: {ex.Message}");
+                App.Log($"[MainViewModel] Could not hook SystemEvents: {ex.Message}");
             }
 
             App.Log("MainViewModel: RefreshMonitors started");
@@ -63,6 +65,14 @@ namespace Lumina.ViewModels
             App.Log("MainViewModel: RefreshNightLightInfo completed");
 
             UpdateExecutionState();
+
+            if (_settings.PreventSleep)
+            {
+                System.Threading.Tasks.Task.Delay(2500).ContinueWith(_ =>
+                {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => ReapplyAwakeState());
+                });
+            }
         }
 
         private System.Threading.CancellationTokenSource? _displayChangeCts;
@@ -71,6 +81,27 @@ namespace Lumina.ViewModels
         {
             App.Log("[MainViewModel] SystemEvents.DisplaySettingsChanged triggered");
             ScheduleDisplaySettingsRefresh();
+        }
+
+        private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            App.Log($"[MainViewModel] SystemEvents.PowerModeChanged triggered: Mode={e.Mode}");
+            if (e.Mode == Microsoft.Win32.PowerModes.Resume || e.Mode == Microsoft.Win32.PowerModes.StatusChange)
+            {
+                ReapplyAwakeState();
+            }
+        }
+
+        private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
+        {
+            App.Log($"[MainViewModel] SystemEvents.SessionSwitch triggered: Reason={e.Reason}");
+            if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock ||
+                e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLogon ||
+                e.Reason == Microsoft.Win32.SessionSwitchReason.ConsoleConnect ||
+                e.Reason == Microsoft.Win32.SessionSwitchReason.RemoteConnect)
+            {
+                ReapplyAwakeState();
+            }
         }
 
         public void ScheduleDisplaySettingsRefresh()
@@ -939,6 +970,7 @@ namespace Lumina.ViewModels
 
         private System.Windows.Threading.DispatcherTimer? _preventSleepTimer;
         private DateTime? _preventSleepExpiry;
+        private int _heartbeatCounter = 0;
 
         public string PreventSleepRemainingText
         {
@@ -970,6 +1002,18 @@ namespace Lumina.ViewModels
             }
         }
 
+        public void ReapplyAwakeState()
+        {
+            if (_settings.PreventSleep)
+            {
+                var result = NativeMethods.SetThreadExecutionState(
+                    NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
+                    NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
+                    NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+                App.Log($"[Power] ReapplyAwakeState: SetThreadExecutionState returned {result}");
+            }
+        }
+
         public void UpdateExecutionState()
         {
             try
@@ -977,28 +1021,30 @@ namespace Lumina.ViewModels
                 if (_settings.PreventSleep)
                 {
                     App.Log($"[Power] Setting thread execution state: Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m)");
-                    NativeMethods.SetThreadExecutionState(
+                    var result = NativeMethods.SetThreadExecutionState(
                         NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                         NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
                         NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+                    App.Log($"[Power] SetThreadExecutionState returned: {result}");
 
                     if (_settings.PreventSleepDurationMinutes > 0)
                     {
                         _preventSleepExpiry = DateTime.UtcNow.AddMinutes(_settings.PreventSleepDurationMinutes);
-                        StartPreventSleepTimer();
                     }
                     else
                     {
-                        StopPreventSleepTimer();
                         _preventSleepExpiry = null;
                     }
+
+                    StartPreventSleepTimer();
                 }
                 else
                 {
                     StopPreventSleepTimer();
                     _preventSleepExpiry = null;
                     App.Log("[Power] Restoring normal thread execution state");
-                    NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+                    var result = NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+                    App.Log($"[Power] Normal SetThreadExecutionState returned: {result}");
                 }
                 OnPropertyChanged(nameof(PreventSleepRemainingText));
             }
@@ -1010,6 +1056,7 @@ namespace Lumina.ViewModels
 
         private void StartPreventSleepTimer()
         {
+            _heartbeatCounter = 0;
             if (_preventSleepTimer == null)
             {
                 _preventSleepTimer = new System.Windows.Threading.DispatcherTimer
@@ -1018,21 +1065,32 @@ namespace Lumina.ViewModels
                 };
                 _preventSleepTimer.Tick += (s, e) =>
                 {
-                    if (!PreventSleep || _preventSleepExpiry == null)
+                    if (!PreventSleep)
                     {
                         StopPreventSleepTimer();
                         return;
                     }
 
-                    if (DateTime.UtcNow >= _preventSleepExpiry.Value)
+                    // Heartbeat: reaffirm execution state every 30 seconds to reset system idle timer
+                    // and keep Windows awake even across power transitions
+                    _heartbeatCounter++;
+                    if (_heartbeatCounter >= 30)
                     {
-                        App.Log($"[Power] Prevent sleep duration ({_settings.PreventSleepDurationMinutes}m) elapsed. Restoring normal sleep.");
-                        StopPreventSleepTimer();
-                        PreventSleep = false;
+                        _heartbeatCounter = 0;
+                        ReapplyAwakeState();
                     }
-                    else
+
+                    if (_preventSleepExpiry != null)
                     {
-                        OnPropertyChanged(nameof(PreventSleepRemainingText));
+                        if (DateTime.UtcNow >= _preventSleepExpiry.Value)
+                        {
+                            App.Log($"[Power] Prevent sleep duration ({_settings.PreventSleepDurationMinutes}m) elapsed. Restoring normal sleep.");
+                            PreventSleep = false;
+                        }
+                        else
+                        {
+                            OnPropertyChanged(nameof(PreventSleepRemainingText));
+                        }
                     }
                 };
             }
@@ -1042,6 +1100,7 @@ namespace Lumina.ViewModels
         private void StopPreventSleepTimer()
         {
             _preventSleepTimer?.Stop();
+            _heartbeatCounter = 0;
         }
 
         public string AutomationModeText
@@ -1213,6 +1272,19 @@ namespace Lumina.ViewModels
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+                Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+                StopPreventSleepTimer();
+                NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+            }
+            catch { }
         }
     }
 }

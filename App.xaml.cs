@@ -122,8 +122,26 @@ namespace Lumina
                 var mainWindow = new MainWindow(_viewModel);
                 MainWindow = mainWindow;
 
-                bool startMinimized = settings.StartMinimized || (e.Args.Length > 0 && e.Args[0] == "--minimized");
-                Log($"Showing MainWindow (startMinimized={startMinimized})");
+                bool isStartupTask = false;
+                if (SettingsService.IsPackaged())
+                {
+                    try
+                    {
+                        var activatedArgs = Windows.ApplicationModel.AppInstance.GetActivatedEventArgs();
+                        if (activatedArgs != null && activatedArgs.Kind == Windows.ApplicationModel.Activation.ActivationKind.StartupTask)
+                        {
+                            isStartupTask = true;
+                            Log("[App] Launched via Windows StartupTask -> starting minimized");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[App] AppInstance activation check warning: {ex.Message}");
+                    }
+                }
+
+                bool startMinimized = settings.StartMinimized || isStartupTask || (e.Args.Length > 0 && e.Args[0] == "--minimized");
+                Log($"Showing MainWindow (startMinimized={startMinimized}, isStartupTask={isStartupTask})");
 
                 if (!startMinimized)
                 {
@@ -164,6 +182,7 @@ namespace Lumina
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             Log("Application_Exit triggered.");
+            try { _viewModel?.Dispose(); } catch { }
             try { NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS); } catch { }
             try { _scheduleService?.Stop(); } catch { }
             try { _scheduleService?.Dispose(); } catch { }

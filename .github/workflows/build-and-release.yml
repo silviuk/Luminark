@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag to build and attach assets to (e.g. v1.1.0)'
+        description: 'Release Tag to build and attach assets to (e.g. v1.1.1)'
         required: false
-        default: 'v1.1.0'
+        default: 'v1.1.1'
 
 permissions:
   contents: write
@@ -58,7 +58,11 @@ jobs:
           $makeappx = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
           Write-Host "Using makeappx: $makeappx"
 
-          $msixOut = "installer/Output/Luminark-1.1.0.0-x64.msix"
+          [xml]$manifest = Get-Content installer/msix/AppxManifest.xml
+          $pkgVersion = $manifest.Package.Identity.Version
+          Write-Host "Packaging MSIX version: $pkgVersion"
+
+          $msixOut = "installer/Output/Luminark-$pkgVersion-x64.msix"
           & $makeappx pack /d $msixLayout /p $msixOut /nv
 
       - name: Create GitHub Release

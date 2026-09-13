@@ -290,6 +290,7 @@ namespace Lumina
                     _notifyIcon.Dispose();
                     _notifyIcon = null;
                 }
+                _viewModel?.Dispose();
             }
             catch (Exception ex)
             {
@@ -304,6 +305,12 @@ namespace Lumina
                 App.Log("[MainWindow] Received WM_SHOWLUMINARK broadcast! Bringing window to foreground.");
                 ShowAndActivate();
                 handled = true;
+            }
+            else if (msg == 0x0218) // WM_POWERBROADCAST
+            {
+                int powerEvent = wParam.ToInt32();
+                App.Log($"[MainWindow] WM_POWERBROADCAST received (powerEvent=0x{powerEvent:X})");
+                _viewModel.ReapplyAwakeState();
             }
             else if (msg == 0x007E) // WM_DISPLAYCHANGE
             {
