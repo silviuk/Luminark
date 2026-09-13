@@ -51,7 +51,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $msixLayout
           Copy-Item -Recurse -Force publish/* $msixLayout/
           Copy-Item -Force installer/msix/AppxManifest.xml $msixLayout/AppxManifest.xml
-          Copy-Item -Recurse -Force installer/msix/Assets $msixLayout/Assets
+          New-Item -ItemType Directory -Force -Path "$msixLayout/Assets"
+          Copy-Item -Force installer/msix/Assets/* "$msixLayout/Assets/"
+          Get-ChildItem "$msixLayout/Assets"
 
           $makeappx = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
           Write-Host "Using makeappx: $makeappx"
