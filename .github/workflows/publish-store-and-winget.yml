@@ -211,21 +211,36 @@ jobs:
           $appObj = Invoke-RestMethod -Method Get -Uri $appUri -Headers $headers
 
           # Check if there is an existing pending submission
+          $createSubUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
           $subId = $null
+          $subObj = $null
           if ($appObj.pendingApplicationSubmission -and $appObj.pendingApplicationSubmission.id) {
-            $subId = $appObj.pendingApplicationSubmission.id
-            Write-Host "Found existing pending submission: $subId"
-          } else {
+            $candidateSubId = $appObj.pendingApplicationSubmission.id
+            Write-Host "Found existing pending submission: $candidateSubId"
+            $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
+            try {
+              $checkSub = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
+              if ($checkSub.status -eq "CommitFailed" -or $checkSub.status -eq "None") {
+                Write-Host "Existing submission is in state '$($checkSub.status)'. Deleting and recreating fresh submission..."
+                Invoke-RestMethod -Method Delete -Uri $subUri -Headers $headers
+                Start-Sleep -Seconds 2
+              } else {
+                $subId = $candidateSubId
+                $subObj = $checkSub
+              }
+            } catch {
+              Write-Warning "Could not query existing submission $candidateSubId, recreating: $_"
+            }
+          }
+
+          if (-not $subId) {
             Write-Host "Creating new draft submission for Product ID: $env:APP_ID..."
-            $createSubUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
             $newSub = Invoke-RestMethod -Method Post -Uri $createSubUri -Headers $headers
             $subId = $newSub.id
             Write-Host "Created new draft submission: $subId"
+            $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId"
+            $subObj = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
           }
-
-          Write-Host "Fetching submission details for submission ID: $subId..."
-          $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId"
-          $subObj = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
 
           $fileUploadUrl = $subObj.fileUploadUrl
           if (-not $fileUploadUrl) {
