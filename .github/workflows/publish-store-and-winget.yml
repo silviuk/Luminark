@@ -224,6 +224,11 @@ jobs:
                 Write-Host "Existing submission is in state '$($checkSub.status)'. Deleting and recreating fresh submission..."
                 Invoke-RestMethod -Method Delete -Uri $subUri -Headers $headers
                 Start-Sleep -Seconds 2
+              } elseif ($checkSub.status -eq "CommitStarted" -or $checkSub.status -eq "PreProcessing" -or $checkSub.status -eq "Certification" -or $checkSub.status -eq "Release") {
+                Write-Host "Existing submission $candidateSubId is ALREADY submitted and active in Partner Center (Status: $($checkSub.status))."
+                Write-Host "Successfully submitted to Microsoft Store! Status: $($checkSub.status)"
+                "store_status=Submitted for Certification (Status: $($checkSub.status))" >> $env:GITHUB_OUTPUT
+                exit 0
               } else {
                 $subId = $candidateSubId
                 $subObj = $checkSub
