@@ -217,14 +217,15 @@ jobs:
           try {
             Write-Host "Retrieving current draft submission from Partner Center..."
             $submissionRaw = msstore submission get $env:APP_ID
+            $submissionText = ($submissionRaw -join "`n")
             Write-Host "Raw response from msstore submission get:"
-            Write-Host $submissionRaw
+            Write-Host $submissionText
 
             # Extract JSON payload if CLI output includes banner or headers
-            $jsonStart = $submissionRaw.IndexOf('{')
-            $jsonEnd = $submissionRaw.LastIndexOf('}')
+            $jsonStart = $submissionText.IndexOf('{')
+            $jsonEnd = $submissionText.LastIndexOf('}')
             if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
-              $jsonString = $submissionRaw.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+              $jsonString = $submissionText.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
               $submissionObj = $jsonString | ConvertFrom-Json
               if ($submissionObj -and $submissionObj.listings) {
                 foreach ($lang in $submissionObj.listings.PSObject.Properties) {
@@ -246,7 +247,8 @@ jobs:
               } else {
                 Write-Host "No listings property found in submission JSON. Attempting module-specific get..."
                 $listingsRaw = msstore submission get $env:APP_ID -m listings
-                Write-Host "Listings module raw: $listingsRaw"
+                $listingsText = ($listingsRaw -join "`n")
+                Write-Host "Listings module raw: $listingsText"
               }
             } else {
               Write-Host "No JSON object found in submission get output."
