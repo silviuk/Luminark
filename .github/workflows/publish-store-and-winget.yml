@@ -141,10 +141,6 @@ jobs:
       # -----------------------------------------------------------------------
       # Step 3: Publish to Windows Store (Microsoft Partner Center)
       # -----------------------------------------------------------------------
-      - name: Setup Microsoft Store Developer CLI
-        if: ${{ !cancelled() && inputs.publish_store }}
-        uses: microsoft/microsoft-store-apppublisher@v1
-
       - name: Publish to Microsoft Store
         if: ${{ !cancelled() && inputs.publish_store }}
         id: msstore
@@ -171,40 +167,74 @@ jobs:
 
           if ($missingSecrets.Count -gt 0) {
             $list = $missingSecrets -join ", "
-            Write-Warning "::warning::Microsoft Store credentials are missing ($list). Skipping Windows Store publication. Add these secrets in GitHub Repo Settings > Secrets and variables > Actions."
+            Write-Warning "::warning::Microsoft Store credentials are missing ($list). Skipping Windows Store publication."
             "store_status=Skipped (Missing secrets: $list)" >> $env:GITHUB_OUTPUT
             exit 0
           }
 
-          $pkgPath = if ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH)) {
-            $env:MSIX_PATH
-          } elseif ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
-            $env:EXE_PATH
+          if (-not ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH))) {
+            if ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
+              Write-Host "Win32 EXE Installer Detected: $($env:EXE_PATH)"
+              Write-Host "Store MSIX package not found. Draft release notes can be managed in Partner Center."
+              "store_status=Win32 EXE release ready (Requires MSIX for automated package submission)" >> $env:GITHUB_OUTPUT
+              exit 0
+            } else {
+              Write-Error "No installer package (.msix or .exe) found in release assets."
+              "store_status=Failed (No installer found)" >> $env:GITHUB_OUTPUT
+              exit 1
+            }
+          }
+
+          Write-Host "Authenticating with Microsoft Partner Center (Entra ID)..."
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body @{
+            grant_type    = "client_credentials"
+            client_id     = $env:CLIENT_ID
+            client_secret = $env:CLIENT_SECRET
+            scope         = "https://manage.devcenter.microsoft.com/.default"
+          }
+
+          $accessToken = $tokenResp.access_token
+          if (-not $accessToken) {
+            Write-Error "Failed to obtain access token from Azure Entra ID."
+            "store_status=Auth Failed" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
+          $headers = @{
+            "Authorization" = "Bearer $accessToken"
+            "Content-Type"  = "application/json"
+            "Accept"        = "application/json"
+          }
+
+          Write-Host "Retrieving Application details for Product ID: $env:APP_ID..."
+          $appUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID"
+          $appObj = Invoke-RestMethod -Method Get -Uri $appUri -Headers $headers
+
+          # Check if there is an existing pending submission
+          $subId = $null
+          if ($appObj.pendingApplicationSubmission -and $appObj.pendingApplicationSubmission.id) {
+            $subId = $appObj.pendingApplicationSubmission.id
+            Write-Host "Found existing pending submission: $subId"
           } else {
-            $null
+            Write-Host "Creating new draft submission for Product ID: $env:APP_ID..."
+            $createSubUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
+            $newSub = Invoke-RestMethod -Method Post -Uri $createSubUri -Headers $headers
+            $subId = $newSub.id
+            Write-Host "Created new draft submission: $subId"
           }
 
-          if (-not $pkgPath) {
-            Write-Error "No installer package (.msix or .exe) found in release assets for Windows Store submission."
-            "store_status=Failed (No installer/package file in release)" >> $env:GITHUB_OUTPUT
+          Write-Host "Fetching submission details for submission ID: $subId..."
+          $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId"
+          $subObj = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
+
+          $fileUploadUrl = $subObj.fileUploadUrl
+          if (-not $fileUploadUrl) {
+            Write-Error "No fileUploadUrl found in submission $subId"
+            "store_status=Failed (No fileUploadUrl)" >> $env:GITHUB_OUTPUT
             exit 1
           }
 
-          Write-Host "Configuring Microsoft Store Developer CLI credentials..."
-          msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "msstore reconfigure failed with exit code $LASTEXITCODE"
-            "store_status=msstore reconfigure failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
-
-          Write-Host "Listing registered products in Partner Center..."
-          msstore apps list
-
-          Write-Host "=========================================================="
-          Write-Host "Updating Store Submission Release Notes..."
-          Write-Host "=========================================================="
-
+          # Update release notes and truncate shortDescription to <= 500 chars for Store compliance
           $releaseNotes = @(
             "What's New in Luminark v1.1.0:",
             "- Monitor Video Input Switching (DDC/CI): Switch inputs (HDMI, DisplayPort, USB-C) from the mini flyout with safety countdown and instant cancel.",
@@ -216,139 +246,100 @@ jobs:
             "- Efficiency: 0.0% idle CPU and ~1-5 MB memory footprint."
           ) -join "`n"
 
-          $notesUpdated = $false
-          try {
-            Write-Host "Retrieving current draft submission from Partner Center..."
-            $submissionRaw = msstore submission get $env:APP_ID
-            $submissionText = ($submissionRaw -join "`n")
-
-            # Extract JSON payload
-            $jsonStart = $submissionText.IndexOf('{')
-            $jsonEnd = $submissionText.LastIndexOf('}')
-            if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
-              $jsonString = $submissionText.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
-              $submissionObj = $jsonString | ConvertFrom-Json
-              if ($submissionObj -and $submissionObj.listings) {
-                foreach ($lang in $submissionObj.listings.PSObject.Properties) {
-                  Write-Host "Processing listing for language: $($lang.Name)"
-                  if ($lang.Value.baseListing) {
-                    $lang.Value.baseListing.releaseNotes = $releaseNotes
-                    Write-Host "Set releaseNotes on $($lang.Name).baseListing"
-
-                    # Ensure ShortDescription meets Store limit (<= 500 characters)
-                    if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
-                      Write-Host "Shortening $($lang.Name).baseListing.shortDescription from $($lang.Value.baseListing.shortDescription.Length) to <500 chars for Store compliance."
-                      $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
-                    }
-                  }
-                }
-
-                $updateFile = "submission_update.json"
-                $submissionObj | ConvertTo-Json -Depth 20 | Out-File -FilePath $updateFile -Encoding utf8 -NoNewline
-
-                Write-Host "Applying updated submission with release notes via msstore-cli..."
-                msstore submission update $env:APP_ID $updateFile -v
-                if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Successfully updated release notes in Microsoft Store submission draft via msstore-cli!"
-                  $notesUpdated = $true
-                } else {
-                  Write-Warning "msstore submission update exited with code $LASTEXITCODE. Trying direct DevCenter REST API..."
-
-                  # Direct Partner Center DevCenter REST API PUT fallback
-                  try {
-                    $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body @{
-                      grant_type    = "client_credentials"
-                      client_id     = $env:CLIENT_ID
-                      client_secret = $env:CLIENT_SECRET
-                      scope         = "https://manage.devcenter.microsoft.com/.default"
-                    }
-                    $subId = $submissionObj.id
-                    $headers = @{
-                      "Authorization" = "Bearer $($tokenResp.access_token)"
-                      "Content-Type"  = "application/json"
-                      "Accept"        = "application/json"
-                    }
-                    $putUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId"
-                    $jsonPayload = [System.IO.File]::ReadAllText((Resolve-Path $updateFile).Path, [System.Text.Encoding]::UTF8)
-                    $putResp = Invoke-RestMethod -Method Put -Uri $putUri -Headers $headers -Body $jsonPayload
-                    Write-Host "✅ Successfully updated submission release notes via DevCenter REST API! Submission Status: $($putResp.status)"
-                    $notesUpdated = $true
-                  } catch {
-                    $errText = "$_ $($_.ErrorDetails.Message)"
-                    Write-Warning "Direct DevCenter REST API call failed: $errText"
-                    if ($errText -match "state 'None'" -or $errText -match "delete the submission and create a new one") {
-                      Write-Host "Detected submission in state 'None'. Deleting old submission and creating a fresh draft as requested by Partner Center..."
-                      try {
-                        Invoke-RestMethod -Method Delete -Uri $putUri -Headers $headers
-                        Write-Host "Deleted draft submission $subId."
-                        Start-Sleep -Seconds 2
-
-                        $createUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
-                        $newSub = Invoke-RestMethod -Method Post -Uri $createUri -Headers $headers
-                        $newSubId = $newSub.id
-                        Write-Host "Created new draft submission: $newSubId"
-
-                        $newGetUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$newSubId"
-                        $freshSub = Invoke-RestMethod -Method Get -Uri $newGetUri -Headers $headers
-
-                        foreach ($lang in $freshSub.listings.PSObject.Properties) {
-                          if ($lang.Value.baseListing) {
-                            $lang.Value.baseListing.releaseNotes = $releaseNotes
-                            if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
-                              $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
-                            }
-                          }
-                        }
-
-                        $freshPayload = $freshSub | ConvertTo-Json -Depth 20
-                        $freshPutResp = Invoke-RestMethod -Method Put -Uri $newGetUri -Headers $headers -Body $freshPayload
-                        Write-Host "✅ Successfully updated release notes on newly created draft submission $newSubId! Status: $($freshPutResp.status)"
-                        $notesUpdated = $true
-                      } catch {
-                        Write-Warning "Re-creation of draft submission failed: $_ $($_.ErrorDetails.Message)"
-                      }
-                    }
-                  }
+          if ($subObj.listings) {
+            foreach ($lang in $subObj.listings.PSObject.Properties) {
+              if ($lang.Value.baseListing) {
+                $lang.Value.baseListing.releaseNotes = $releaseNotes
+                if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
+                  Write-Host "Truncating $($lang.Name).baseListing.shortDescription from $($lang.Value.baseListing.shortDescription.Length) to <= 500 characters."
+                  $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
                 }
               }
             }
-          } catch {
-            Write-Warning "Error while updating store submission release notes: $_"
           }
 
-          if ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH)) {
-            Write-Host "Publishing MSIX package ($env:MSIX_PATH) to Store Product ID: $env:APP_ID..."
-            msstore publish $env:MSIX_PATH -id $env:APP_ID -v
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "Successfully published package to Microsoft Store!"
-              "store_status=Published successfully via msstore-cli" >> $env:GITHUB_OUTPUT
-            } else {
-              Write-Error "msstore publish failed with exit code $LASTEXITCODE"
-              "store_status=msstore publish failed (exit $LASTEXITCODE)" >> $env:GITHUB_OUTPUT
+          # Configure application packages
+          $msixItem = Get-Item $env:MSIX_PATH
+          $msixFileName = $msixItem.Name
+          Write-Host "Configuring application package: $msixFileName"
+
+          $pkgList = @()
+          if ($subObj.applicationPackages) {
+            foreach ($existingPkg in $subObj.applicationPackages) {
+              if ($existingPkg.fileStatus -ne "PendingUpload") {
+                $existingPkg.fileStatus = "PendingDelete"
+                $pkgList += $existingPkg
+              }
+            }
+          }
+          $pkgList += @{
+            fileName = $msixFileName
+            fileStatus = "PendingUpload"
+          }
+          $subObj.applicationPackages = $pkgList
+
+          Write-Host "Updating submission metadata with package information and release notes..."
+          $subJson = $subObj | ConvertTo-Json -Depth 20
+          $updatedSub = Invoke-RestMethod -Method Put -Uri $subUri -Headers $headers -Body $subJson
+          Write-Host "Submission metadata updated successfully! Status: $($updatedSub.status)"
+
+          # Prepare zip bundle containing the MSIX package
+          Write-Host "Packaging MSIX into upload zip bundle..."
+          $tempUploadDir = Join-Path $env:RUNNER_TEMP "msstore_upload_$([guid]::NewGuid().ToString('N'))"
+          $bundleDir = Join-Path $tempUploadDir "bundle"
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+          Copy-Item -Path $msixItem.FullName -Destination (Join-Path $bundleDir $msixFileName)
+
+          $zipPath = Join-Path $tempUploadDir "Upload.zip"
+          Compress-Archive -Path "$bundleDir\*" -DestinationPath $zipPath
+
+          Write-Host "Uploading package bundle to Azure Blob Storage ($([Math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB)..."
+          $httpClient = [System.Net.Http.HttpClient]::new()
+          $httpClient.Timeout = [System.TimeSpan]::FromMinutes(15)
+          $fileStream = [System.IO.File]::OpenRead($zipPath)
+          try {
+            $streamContent = [System.Net.Http.StreamContent]::new($fileStream)
+            $streamContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/zip")
+            $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Put, $fileUploadUrl)
+            $request.Headers.Add("x-ms-blob-type", "BlockBlob")
+            $request.Content = $streamContent
+            $uploadResp = $httpClient.SendAsync($request).GetAwaiter().GetResult()
+            if (-not $uploadResp.IsSuccessStatusCode) {
+              $respErr = $uploadResp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+              Write-Error "Azure Blob upload failed with status $($uploadResp.StatusCode): $respErr"
+              "store_status=Upload to Azure Blob Failed" >> $env:GITHUB_OUTPUT
               exit 1
             }
-          } elseif ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
-            Write-Host "=========================================================="
-            Write-Host "Win32 EXE Installer Detected: $($env:EXE_PATH)"
-            Write-Host "Microsoft Store CLI (msstore) requires an .msix package for automated package upload."
-            Write-Host "For unpackaged Win32 (.exe) apps in Microsoft Partner Center:"
-            Write-Host "1. Open Partner Center > Apps and games > Product Overview ($env:APP_ID)"
-            Write-Host "2. Under 'Packages', provide the GitHub Release installer URL:"
-            Write-Host "   $($steps.release_info.outputs.installer_url)"
-            Write-Host "3. Silent install command: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
-            Write-Host "=========================================================="
-            $statusMsg = if ($notesUpdated) {
-              "Win32 EXE release ready (Draft release notes updated in Microsoft Partner Center)"
-            } else {
-              "Win32 EXE release ready (Requires MSIX for CLI upload or URL submission in Partner Center)"
-            }
-            "store_status=$statusMsg" >> $env:GITHUB_OUTPUT
-            $global:LASTEXITCODE = 0
-          } else {
-            Write-Error "No installer package (.msix or .exe) found in release assets."
-            "store_status=Failed (No installer found)" >> $env:GITHUB_OUTPUT
+            Write-Host "Successfully uploaded MSIX bundle to Azure Blob Storage!"
+          } finally {
+            $fileStream.Close()
+            $fileStream.Dispose()
+            $httpClient.Dispose()
+          }
+
+          Write-Host "Committing submission to Partner Center for certification..."
+          $commitUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId/commit"
+          $commitResp = Invoke-RestMethod -Method Post -Uri $commitUri -Headers $headers
+          Write-Host "Commit response: $($commitResp | ConvertTo-Json -Compress)"
+
+          Write-Host "Polling submission status..."
+          $statusUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId/status"
+          $pollCount = 0
+          do {
+            Start-Sleep -Seconds 5
+            $statusObj = Invoke-RestMethod -Method Get -Uri $statusUri -Headers $headers
+            Write-Host "Submission Status: $($statusObj.status)"
+            $pollCount++
+          } while ($statusObj.status -eq "CommitStarted" -and $pollCount -lt 12)
+
+          if ($statusObj.status -eq "CommitFailed") {
+            Write-Error "Submission commit failed. Errors: $($statusObj.statusDetails | ConvertTo-Json -Depth 5)"
+            "store_status=CommitFailed" >> $env:GITHUB_OUTPUT
             exit 1
           }
+
+          Write-Host "Successfully published to Microsoft Store! Status: $($statusObj.status)"
+          "store_status=Submitted for Certification (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
 
       # -----------------------------------------------------------------------
       # Step 4: Step Summary
