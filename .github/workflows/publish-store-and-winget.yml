@@ -132,19 +132,21 @@ jobs:
               "winget_status=Exited with code $LASTEXITCODE (Check PR status)" >> $env:GITHUB_OUTPUT
             }
           } catch {
-            Write-Error "Error during wingetcreate execution: $_"
+            Write-Warning "Error during wingetcreate execution: $_"
             "winget_status=Error: $_" >> $env:GITHUB_OUTPUT
+          } finally {
+            $global:LASTEXITCODE = 0
           }
 
       # -----------------------------------------------------------------------
       # Step 3: Publish to Windows Store (Microsoft Partner Center)
       # -----------------------------------------------------------------------
       - name: Setup Microsoft Store Developer CLI
-        if: ${{ inputs.publish_store }}
+        if: ${{ !cancelled() && inputs.publish_store }}
         uses: microsoft/microsoft-store-apppublisher@v1
 
       - name: Publish to Microsoft Store
-        if: ${{ inputs.publish_store }}
+        if: ${{ !cancelled() && inputs.publish_store }}
         id: msstore
         shell: pwsh
         env:
