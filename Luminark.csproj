@@ -11,9 +11,11 @@
     <ApplicationTitle>Luminark</ApplicationTitle>
     <AssemblyName>Luminark</AssemblyName>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <AssemblyVersion>1.1.1.0</AssemblyVersion>
-    <FileVersion>1.1.1.0</FileVersion>
-    <Version>1.1.1</Version>
+    <AssemblyVersion>1.1.2.0</AssemblyVersion>
+    <FileVersion>1.1.2.0</FileVersion>
+    <Version>1.1.2</Version>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
     <Company>Silviu Vlasceanu</Company>
     <Authors>Silviu Vlasceanu</Authors>
     <Product>Luminark</Product>

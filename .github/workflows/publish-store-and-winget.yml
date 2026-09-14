@@ -259,7 +259,8 @@ jobs:
 
           # Update release notes and truncate shortDescription to <= 500 chars for Store compliance
           $releaseNotes = @(
-            "What's New in Luminark v1.1.1:",
+            "What's New in Luminark v1.1.2:",
+            "- Self-Contained Deployment: Bundled complete .NET runtime directly into package. Zero external dependencies, eliminating any '.NET required' download prompts on clean PCs.",
             "- Windows Autostart Fix: Native MSIX startupTask registration ensuring reliable automatic boot launch across updates, starting minimized directly to tray.",
             "- Resilient Sleep Prevention (Awake Engine): 30-second keep-alive heartbeat asserting thread execution state and resetting Windows idle timers in both timed and indefinite modes.",
             "- Power & Session Recovery: SystemEvents hooks and WM_POWERBROADCAST listeners to instantly re-apply awake state after workstation unlock, power transitions, or sleep resume.",

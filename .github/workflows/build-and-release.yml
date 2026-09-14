@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag to build and attach assets to (e.g. v1.1.1)'
+        description: 'Release Tag to build and attach assets to (e.g. v1.1.2)'
         required: false
-        default: 'v1.1.1'
+        default: 'v1.1.2'
 
 permissions:
   contents: write
@@ -32,11 +32,11 @@ jobs:
           choco install innosetup --no-progress
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore -r win-x64
 
       - name: Publish Lumina
         run: |
-          dotnet publish -c Release -o publish
+          dotnet publish -c Release -r win-x64 --self-contained true -o publish
           New-Item -ItemType Directory -Force -Path installer/publish
           Copy-Item -Recurse -Force publish/* installer/publish/
 
