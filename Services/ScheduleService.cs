@@ -99,10 +99,10 @@ namespace Lumina.Services
 
                 if (settings.SyncWithNightLight)
                 {
+                    var info = _nightLightService.GetNightLightInfo();
                     if (settings.NightLightSyncMode == 1)
                     {
                         // Follow Windows Sunset and Sunrise times
-                        var info = _nightLightService.GetNightLightInfo();
                         var dayStart = info.Sunrise ?? settings.DayTime;
                         var nightStart = info.Sunset ?? settings.NightTime;
                         isDay = IsDaytime(now, dayStart, nightStart);
@@ -110,8 +110,19 @@ namespace Lumina.Services
                     else
                     {
                         // Follow Windows Night Light live state (default)
-                        bool isNightLightActive = _nightLightService.IsNightLightActive();
-                        isDay = !isNightLightActive;
+                        bool isNightLightActive = info.IsActive;
+                        if (isNightLightActive)
+                        {
+                            // Night Light is active -> Dark Mode
+                            isDay = false;
+                        }
+                        else
+                        {
+                            // If Night Light is not currently active, fall back to whether it is actually daytime
+                            var dayStart = info.Sunrise ?? settings.DayTime;
+                            var nightStart = info.Sunset ?? settings.NightTime;
+                            isDay = IsDaytime(now, dayStart, nightStart);
+                        }
                     }
                 }
                 else

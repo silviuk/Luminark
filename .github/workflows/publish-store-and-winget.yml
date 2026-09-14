@@ -259,14 +259,13 @@ jobs:
 
           # Update release notes and truncate shortDescription to <= 500 chars for Store compliance
           $releaseNotes = @(
-            "What's New in Luminark v1.1.2:",
-            "- Self-Contained Deployment: Bundled complete .NET runtime directly into package. Zero external dependencies, eliminating any '.NET required' download prompts on clean PCs.",
-            "- Windows Autostart Fix: Native MSIX startupTask registration ensuring reliable automatic boot launch across updates, starting minimized directly to tray.",
-            "- Resilient Sleep Prevention (Awake Engine): 30-second keep-alive heartbeat asserting thread execution state and resetting Windows idle timers in both timed and indefinite modes.",
-            "- Power & Session Recovery: SystemEvents hooks and WM_POWERBROADCAST listeners to instantly re-apply awake state after workstation unlock, power transitions, or sleep resume.",
-            "- Monitor Input & Audio (DDC/CI): Hardware video input switching and volume controls directly from the flyout.",
-            "- Auto-Detection: Multi-stage USB-C / Alt-Mode hotplug detection pipeline.",
-            "- Performance: 0.0% idle CPU and ~1-5 MB memory footprint."
+            "What's New in Luminark v1.1.3:",
+            "- Intelligent Night Shift & Dark Mode Synchronization: Fixed issue where schedule evaluation could switch Windows to Light Mode at night when Night Light was running on schedule.",
+            "- Schedule-Aware Night Light Detection: Night Light state evaluation now accounts for scheduled time windows and sunset/sunrise, accurately reflecting Windows 11 Night Light active periods.",
+            "- First-Launch Local Sun Discovery: On fresh installs, Luminark automatically initializes daylight hours using Windows location-based sunset and sunrise times.",
+            "- Self-Contained Package: Fully self-contained .NET 8 x64 runtime embedded out-of-the-box with zero dependency prompts.",
+            "- Resilient Sleep Prevention (Awake Engine): Periodic keep-awake heartbeat and power/session recovery hooks.",
+            "- Display Hotplug Resiliency: Progressive detection for USB-C and external monitors."
           ) -join "`n"
 
           if ($subObj.listings) {

@@ -115,26 +115,23 @@ namespace Lumina.Services
             }
         }
 
-        public bool IsNightLightActive()
+        public static bool IsTimeBetween(TimeSpan current, TimeSpan start, TimeSpan end)
         {
-            try
+            if (start < end)
             {
-                using var key = Registry.CurrentUser.OpenSubKey(StateKeyPath);
-                if (key?.GetValue("Data") is byte[] data && data.Length > 18)
-                {
-                    // Look for tag 2A-2B-0E which directly precedes the state byte in CloudStore
-                    int idx = FindPattern(data, new byte[] { 0x2A, 0x2B, 0x0E });
-                    byte stateByte = (idx >= 0 && idx + 3 < data.Length) ? data[idx + 3] : data[18];
-
-                    // Active states: 0x13, 0x14, 0x15. Inactive: 0x10, 0x11, 0x12
-                    return stateByte == 0x13 || stateByte == 0x14 || stateByte == 0x15;
-                }
+                return current >= start && current < end;
             }
-            catch (Exception ex)
+            else if (start > end)
             {
-                System.Diagnostics.Debug.WriteLine($"Error reading Night Light state: {ex.Message}");
+                // Overnight schedule, e.g. 21:00 to 07:00
+                return current >= start || current < end;
             }
             return false;
+        }
+
+        public bool IsNightLightActive()
+        {
+            return GetNightLightInfo().IsActive;
         }
 
         public NightLightScheduleInfo GetNightLightInfo()
@@ -142,7 +139,7 @@ namespace Lumina.Services
             var info = new NightLightScheduleInfo
             {
                 IsSupported = IsSupported(),
-                IsActive = IsNightLightActive()
+                IsActive = false
             };
 
             if (!info.IsSupported) return info;
@@ -194,6 +191,47 @@ namespace Lumina.Services
                 System.Diagnostics.Debug.WriteLine($"Error reading Night Light settings: {ex.Message}");
             }
 
+            // Determine if Night Light is currently active:
+            // 1. Direct state byte from bluelightreductionstate
+            bool stateByteActive = false;
+            try
+            {
+                using var stateKey = Registry.CurrentUser.OpenSubKey(StateKeyPath);
+                if (stateKey?.GetValue("Data") is byte[] stateData && stateData.Length > 18)
+                {
+                    int idx = FindPattern(stateData, new byte[] { 0x2A, 0x2B, 0x0E });
+                    byte stateByte = (idx >= 0 && idx + 3 < stateData.Length) ? stateData[idx + 3] : stateData[18];
+                    stateByteActive = stateByte == 0x13 || stateByte == 0x14 || stateByte == 0x15;
+                }
+            }
+            catch { }
+
+            if (stateByteActive)
+            {
+                info.IsActive = true;
+                return info;
+            }
+
+            // 2. Schedule-based activation (Windows 11 schedule does not flip the manual state byte)
+            var now = DateTime.Now.TimeOfDay;
+            if (info.ScheduleStart.HasValue && info.ScheduleEnd.HasValue && info.ScheduleStart.Value != info.ScheduleEnd.Value)
+            {
+                if (IsTimeBetween(now, info.ScheduleStart.Value, info.ScheduleEnd.Value))
+                {
+                    info.IsActive = true;
+                    return info;
+                }
+            }
+            else if (info.Sunset.HasValue && info.Sunrise.HasValue)
+            {
+                if (IsTimeBetween(now, info.Sunset.Value, info.Sunrise.Value))
+                {
+                    info.IsActive = true;
+                    return info;
+                }
+            }
+
+            info.IsActive = false;
             return info;
         }
 

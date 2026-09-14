@@ -51,6 +51,18 @@ namespace Lumina.Services
                     var loaded = JsonSerializer.Deserialize<AppSettings>(json);
                     if (loaded != null) settings = loaded;
                 }
+                else
+                {
+                    // Fresh installation: initialize schedule from Windows location-based sunrise/sunset if available
+                    try
+                    {
+                        var nl = new NightLightService();
+                        var info = nl.GetNightLightInfo();
+                        if (info.Sunrise.HasValue) settings.DayTime = info.Sunrise.Value;
+                        if (info.Sunset.HasValue) settings.NightTime = info.Sunset.Value;
+                    }
+                    catch { }
+                }
             }
             catch (Exception ex)
             {
