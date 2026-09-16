@@ -55,8 +55,16 @@ jobs:
           Copy-Item -Force installer/msix/Assets/* "$msixLayout/Assets/"
           Get-ChildItem "$msixLayout/Assets"
 
-          $makeappx = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          $sdkBin = Split-Path (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          $makeappx = Join-Path $sdkBin "makeappx.exe"
+          $makepri = Join-Path $sdkBin "makepri.exe"
           Write-Host "Using makeappx: $makeappx"
+          Write-Host "Using makepri:  $makepri"
+
+          # Compile package resource index (PRI) so Windows shell maps unplated icon variants without accent backplates
+          & $makepri createconfig /cf "$msixLayout/priconfig.xml" /dq en-US /pv 10.0.0 /o
+          & $makepri new /pr $msixLayout /cf "$msixLayout/priconfig.xml" /of "$msixLayout/resources.pri" /o
+          Remove-Item "$msixLayout/priconfig.xml" -Force -ErrorAction SilentlyContinue
 
           [xml]$manifest = Get-Content installer/msix/AppxManifest.xml
           $pkgVersion = $manifest.Package.Identity.Version
