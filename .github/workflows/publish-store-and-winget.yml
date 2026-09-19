@@ -45,10 +45,10 @@ jobs:
 
           if ([string]::IsNullOrWhiteSpace($inputTag)) {
             Write-Host "No release tag supplied. Querying latest release..."
-            $releaseJson = gh release view --json tagName,name,assets
+            $releaseJson = gh release view --json tagName,name,assets,body
           } else {
             Write-Host "Querying release tag: $inputTag..."
-            $releaseJson = gh release view $inputTag --json tagName,name,assets
+            $releaseJson = gh release view $inputTag --json tagName,name,assets,body
           }
 
           $release = $releaseJson | ConvertFrom-Json
@@ -58,6 +58,40 @@ jobs:
           Write-Host "Target Release Tag: $tag (Version: $version)"
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
+
+          # Extract release notes for Store What's New section
+          $releaseNotes = ""
+          if ($release.body) {
+            $releaseNotes = $release.body.Trim()
+            Write-Host "Found release notes from GitHub Release body."
+          }
+
+          if (-not $releaseNotes) {
+            $manifestPath = "manifests/s/silviuk/Luminark/$version/silviuk.Luminark.locale.en-US.yaml"
+            if (Test-Path $manifestPath) {
+              $raw = Get-Content $manifestPath -Raw
+              if ($raw -match "(?ms)ReleaseNotes:\s*\|-\r?\n(.*?)(?=\r?\n[a-zA-Z0-9_-]+:|\Z)") {
+                $releaseNotes = $matches[1].Trim()
+                Write-Host "Found release notes from $manifestPath."
+              }
+            }
+          }
+
+          if (-not $releaseNotes -and (Test-Path "CHANGELOG.md")) {
+            $cl = Get-Content "CHANGELOG.md" -Raw
+            if ($cl -match "(?ms)##\s*\[?$([regex]::Escape($version))\]?.*?\r?\n(.*?)(?=\r?\n##|\Z)") {
+              $releaseNotes = $matches[1].Trim()
+              Write-Host "Found release notes from CHANGELOG.md."
+            }
+          }
+
+          # Store API releaseNotes character limit is 1500 chars
+          if ($releaseNotes.Length -gt 1500) {
+            Write-Host "Truncating release notes from $($releaseNotes.Length) to 1500 characters for Store limit."
+            $releaseNotes = $releaseNotes.Substring(0, 1496) + "..."
+          }
+
+          Set-Content -Path "release_notes.txt" -Value $releaseNotes -Encoding utf8
 
           # Create directory and download all release artifacts
           New-Item -ItemType Directory -Path "release-assets" -Force | Out-Null
@@ -257,16 +291,18 @@ jobs:
             exit 1
           }
 
-          # Update release notes and truncate shortDescription to <= 500 chars for Store compliance
-          $releaseNotes = @(
-            "What's New in Luminark v1.1.3:",
-            "- Intelligent Night Shift & Dark Mode Synchronization: Fixed issue where schedule evaluation could switch Windows to Light Mode at night when Night Light was running on schedule.",
-            "- Schedule-Aware Night Light Detection: Night Light state evaluation now accounts for scheduled time windows and sunset/sunrise, accurately reflecting Windows 11 Night Light active periods.",
-            "- First-Launch Local Sun Discovery: On fresh installs, Luminark automatically initializes daylight hours using Windows location-based sunset and sunrise times.",
-            "- Self-Contained Package: Fully self-contained .NET 8 x64 runtime embedded out-of-the-box with zero dependency prompts.",
-            "- Resilient Sleep Prevention (Awake Engine): Periodic keep-awake heartbeat and power/session recovery hooks.",
-            "- Display Hotplug Resiliency: Progressive detection for USB-C and external monitors."
-          ) -join "`n"
+          # Load dynamic release notes for Store What's New section
+          $releaseNotes = ""
+          if (Test-Path "release_notes.txt") {
+            $releaseNotes = (Get-Content "release_notes.txt" -Raw).Trim()
+          }
+
+          if (-not $releaseNotes) {
+            $releaseNotes = "Luminark v$env:VERSION update: Performance improvements, sleep prevention enhancements, and multi-monitor display fixes."
+          }
+
+          Write-Host "Submitting release notes to Windows Store What's New (Length: $($releaseNotes.Length) chars):"
+          Write-Host $releaseNotes
 
           if ($subObj.listings) {
             foreach ($lang in $subObj.listings.PSObject.Properties) {

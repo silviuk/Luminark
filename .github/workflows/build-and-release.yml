@@ -77,6 +77,40 @@ jobs:
           $msixOut = "installer/Output/Luminark-$pkgVersion-x64.msix"
           & $makeappx pack /d $msixLayout /p $msixOut /nv
 
+      - name: Extract Release Notes
+        id: release_notes
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.release_tag || github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          $notes = ""
+
+          if (Test-Path "CHANGELOG.md") {
+            $cl = Get-Content "CHANGELOG.md" -Raw
+            if ($cl -match "(?ms)##\s*\[?$([regex]::Escape($version))\]?.*?\r?\n(.*?)(?=\r?\n##|\Z)") {
+              $notes = $matches[1].Trim()
+              Write-Host "Found release notes for v$version in CHANGELOG.md"
+            }
+          }
+
+          if (-not $notes) {
+            $manifestLocale = "manifests/s/silviuk/Luminark/$version/silviuk.Luminark.locale.en-US.yaml"
+            if (Test-Path $manifestLocale) {
+              $content = Get-Content $manifestLocale -Raw
+              if ($content -match "(?ms)ReleaseNotes:\s*\|-\r?\n(.*?)(?=\r?\n[a-zA-Z0-9_-]+:|\Z)") {
+                $notes = $matches[1].Trim()
+                Write-Host "Found release notes for v$version in $manifestLocale"
+              }
+            }
+          }
+
+          if ($notes) {
+            Set-Content -Path "release_notes.md" -Value $notes -Encoding utf8
+            "has_notes=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "has_notes=false" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -85,9 +119,10 @@ jobs:
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           name: Luminark ${{ inputs.release_tag || github.ref_name }}
+          body_path: ${{ steps.release_notes.outputs.has_notes == 'true' && 'release_notes.md' || '' }}
+          generate_release_notes: ${{ steps.release_notes.outputs.has_notes != 'true' }}
           files: |
             installer/Output/Luminark-Setup-*.exe
             installer/Output/Luminark-*.msix
           draft: false
           prerelease: false
-          generate_release_notes: false
