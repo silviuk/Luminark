@@ -4,6 +4,16 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-09-19
+
+### Fixed
+- **Startup Crash (Missing app.ico Resource)**:
+  - Resolved `XamlParseException` on application startup caused by missing embedded `assets/app.ico` resource.
+  - Added `assets\app.ico` to assembly `<Resource>` and `<Content>` item groups in project file.
+  - Implemented safe, defensive window icon loading in code-behind with multi-tier fallback (pack URI -> relative file -> system default) to prevent startup failures.
+
+---
+
 ## [1.1.4] - 2026-09-19
 
 ### Added

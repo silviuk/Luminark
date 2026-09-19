@@ -2,7 +2,7 @@
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Luminark"
-#define MyAppVersion "1.1.4"
+#define MyAppVersion "1.1.5"
 #define MyAppPublisher "Silviu Vlasceanu"
 #define MyAppURL "https://github.com/silviuk/Luminark"
 #define MyAppExeName "Luminark.exe"

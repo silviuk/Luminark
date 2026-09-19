@@ -41,6 +41,25 @@ namespace Lumina
             InitializeComponent();
             App.Log("[MainWindow] InitializeComponent completed");
 
+            try
+            {
+                var iconUri = new Uri("pack://application:,,,/assets/app.ico", UriKind.RelativeOrAbsolute);
+                Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconUri);
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MainWindow] Could not load window icon from pack URI: {ex.Message}");
+                try
+                {
+                    var fallbackPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "app.ico");
+                    if (System.IO.File.Exists(fallbackPath))
+                    {
+                        Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri(fallbackPath, UriKind.Absolute));
+                    }
+                }
+                catch { }
+            }
+
             _viewModel.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(MainViewModel.IsLightTheme) ||
