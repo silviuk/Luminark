@@ -49,10 +49,12 @@ namespace Lumina.ViewModels
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
                 Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
                 Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
+                _isWorkstationLocked = NativeMethods.IsWorkstationLocked();
+                App.Log($"[MainViewModel] Initial lock state: locked={_isWorkstationLocked}");
             }
             catch (Exception ex)
             {
-                App.Log($"[MainViewModel] Could not hook SystemEvents: {ex.Message}");
+                App.Log($"[MainViewModel] Could not hook SystemEvents or check lock state: {ex.Message}");
             }
 
             App.Log("MainViewModel: RefreshMonitors started");
@@ -96,6 +98,17 @@ namespace Lumina.ViewModels
         private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
         {
             App.Log($"[MainViewModel] SystemEvents.SessionSwitch triggered: Reason={e.Reason}");
+            if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock)
+            {
+                _isWorkstationLocked = true;
+                App.Log("[Power] Workstation locked: screen can turn off, PC will stay awake");
+            }
+            else if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)
+            {
+                _isWorkstationLocked = false;
+                App.Log("[Power] Workstation unlocked: restoring display awake state");
+            }
+
             if (_settings.PreventSleep)
             {
                 ReapplyAwakeState();
@@ -973,6 +986,7 @@ namespace Lumina.ViewModels
         private bool _powerRequestSystemSet = false;
         private bool _powerRequestDisplaySet = false;
         private bool _powerRequestExecutionSet = false;
+        private bool _isWorkstationLocked = false;
 
         public string PreventSleepRemainingText
         {
@@ -1014,7 +1028,7 @@ namespace Lumina.ViewModels
                     {
                         Version = NativeMethods.POWER_REQUEST_CONTEXT_VERSION,
                         Flags = NativeMethods.POWER_REQUEST_CONTEXT_SIMPLE_STRING,
-                        SimpleReasonString = "Luminark: Prevent Sleep and Display Off"
+                        SimpleReasonString = "Luminark: Prevent Sleep"
                     };
 
                     _powerRequestHandle = NativeMethods.PowerCreateRequest(ref context);
@@ -1032,20 +1046,37 @@ namespace Lumina.ViewModels
 
                 if (_powerRequestHandle != IntPtr.Zero)
                 {
+                    // 1. Keep system awake (always when PreventSleep is active)
                     if (!_powerRequestSystemSet)
                     {
                         _powerRequestSystemSet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestSystemRequired);
                         App.Log($"[Power] PowerSetRequest(SystemRequired): {_powerRequestSystemSet}");
                     }
-                    if (!_powerRequestDisplaySet)
-                    {
-                        _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-                        App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
-                    }
+
+                    // 2. Prevent Desktop Activity Moderator (DAM) suspension during Connected Standby
                     if (!_powerRequestExecutionSet)
                     {
                         _powerRequestExecutionSet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestExecutionRequired);
                         App.Log($"[Power] PowerSetRequest(ExecutionRequired): {_powerRequestExecutionSet}");
+                    }
+
+                    // 3. Keep display on only when unlocked; allow screen to sleep when locked
+                    if (!_isWorkstationLocked)
+                    {
+                        if (!_powerRequestDisplaySet)
+                        {
+                            _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                            App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
+                        }
+                    }
+                    else
+                    {
+                        if (_powerRequestDisplaySet)
+                        {
+                            NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                            _powerRequestDisplaySet = false;
+                            App.Log("[Power] Cleared PowerRequestDisplayRequired (workstation locked)");
+                        }
                     }
                 }
             }
@@ -1099,24 +1130,37 @@ namespace Lumina.ViewModels
             if (_settings.PreventSleep)
             {
                 // 1. Ensure kernel power requests are active (modern Windows 10/11 & S0 Modern Standby)
-                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestDisplaySet)
+                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestExecutionSet || (!_isWorkstationLocked && !_powerRequestDisplaySet))
                 {
                     EnablePowerRequests();
                 }
+                else if (_isWorkstationLocked && _powerRequestDisplaySet)
+                {
+                    NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                    _powerRequestDisplaySet = false;
+                    App.Log("[Power] Cleared PowerRequestDisplayRequired on reapply (workstation locked)");
+                }
 
                 // 2. Reaffirm thread execution state
-                var result = NativeMethods.SetThreadExecutionState(
-                    NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
-                    NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
-                    NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
-                App.Log($"[Power] ReapplyAwakeState: SetThreadExecutionState returned {result}");
-
-                // 3. Dispatch safe zero-delta mouse nudge to reset legacy display idle timers
-                try
+                var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS | NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED;
+                if (!_isWorkstationLocked)
                 {
-                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                    esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
                 }
-                catch { }
+
+                var result = NativeMethods.SetThreadExecutionState(esFlags);
+                App.Log($"[Power] ReapplyAwakeState (locked={_isWorkstationLocked}): SetThreadExecutionState returned {result}");
+
+                // 3. Dispatch safe zero-delta mouse nudge ONLY when workstation is unlocked
+                // When locked, do NOT send mouse events so monitors can sleep properly while PC stays awake.
+                if (!_isWorkstationLocked)
+                {
+                    try
+                    {
+                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                    }
+                    catch { }
+                }
             }
         }
 
@@ -1126,16 +1170,19 @@ namespace Lumina.ViewModels
             {
                 if (_settings.PreventSleep)
                 {
-                    App.Log($"[Power] Activating Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m)");
+                    App.Log($"[Power] Activating Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m, locked={_isWorkstationLocked})");
 
                     // 1. Kernel Power Request (modern Windows 10/11 & S0 Modern Standby)
                     EnablePowerRequests();
 
                     // 2. Thread Execution State (legacy / defense-in-depth)
-                    var result = NativeMethods.SetThreadExecutionState(
-                        NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
-                        NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
-                        NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+                    var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS | NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED;
+                    if (!_isWorkstationLocked)
+                    {
+                        esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
+                    }
+
+                    var result = NativeMethods.SetThreadExecutionState(esFlags);
                     App.Log($"[Power] SetThreadExecutionState returned: {result}");
 
                     if (_settings.PreventSleepDurationMinutes > 0)

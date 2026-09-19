@@ -298,5 +298,75 @@ namespace Lumina.Services
         public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
 
         public const uint MOUSEEVENTF_MOVE = 0x0001;
+
+        #region Session and Lock Detection
+
+        public const int WTS_CURRENT_SESSION = -1;
+        public const int WTS_SESSION_INFO_EX = 25;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WTSINFOEX
+        {
+            public int Level;
+            public int Reserved;
+            public WTSINFOEX_LEVEL Data;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct WTSINFOEX_LEVEL
+        {
+            [FieldOffset(0)]
+            public WTSINFOEX_LEVEL1 Level1;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WTSINFOEX_LEVEL1
+        {
+            public int SessionId;
+            public int SessionState;
+            public int SessionFlags;
+        }
+
+        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool WTSQuerySessionInformation(
+            IntPtr hServer,
+            int sessionId,
+            int infoClass,
+            out IntPtr ppBuffer,
+            out int bytesReturned);
+
+        [DllImport("wtsapi32.dll")]
+        public static extern void WTSFreeMemory(IntPtr memory);
+
+        public static bool IsWorkstationLocked()
+        {
+            if (!WTSQuerySessionInformation(
+                    IntPtr.Zero,
+                    WTS_CURRENT_SESSION,
+                    WTS_SESSION_INFO_EX,
+                    out var buffer,
+                    out _))
+            {
+                return false;
+            }
+
+            try
+            {
+                var info = Marshal.PtrToStructure<WTSINFOEX>(buffer);
+                // In Level1: SessionFlags == 0 indicates locked (WTS_SESSIONSTATE_LOCK), 1 indicates unlocked (WTS_SESSIONSTATE_UNLOCK)
+                return info.Data.Level1.SessionFlags == 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                WTSFreeMemory(buffer);
+            }
+        }
+
+        #endregion
     }
 }
