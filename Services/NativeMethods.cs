@@ -260,5 +260,43 @@ namespace Lumina.Services
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE esFlags);
+
+        public const uint POWER_REQUEST_CONTEXT_VERSION = 0;
+        public const uint POWER_REQUEST_CONTEXT_SIMPLE_STRING = 0x1;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct REASON_CONTEXT
+        {
+            public uint Version;
+            public uint Flags;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string SimpleReasonString;
+        }
+
+        public enum POWER_REQUEST_TYPE
+        {
+            PowerRequestDisplayRequired = 0,
+            PowerRequestSystemRequired = 1,
+            PowerRequestAwayModeRequired = 2,
+            PowerRequestExecutionRequired = 3
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr PowerCreateRequest(ref REASON_CONTEXT context);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool PowerSetRequest(IntPtr powerRequest, POWER_REQUEST_TYPE requestType);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool PowerClearRequest(IntPtr powerRequest, POWER_REQUEST_TYPE requestType);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("user32.dll")]
+        public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
+
+        public const uint MOUSEEVENTF_MOVE = 0x0001;
     }
 }

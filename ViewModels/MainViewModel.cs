@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using Lumina.Models;
 using Lumina.Services;
@@ -86,7 +87,7 @@ namespace Lumina.ViewModels
         private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
         {
             App.Log($"[MainViewModel] SystemEvents.PowerModeChanged triggered: Mode={e.Mode}");
-            if (e.Mode == Microsoft.Win32.PowerModes.Resume || e.Mode == Microsoft.Win32.PowerModes.StatusChange)
+            if (_settings.PreventSleep)
             {
                 ReapplyAwakeState();
             }
@@ -95,10 +96,7 @@ namespace Lumina.ViewModels
         private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
         {
             App.Log($"[MainViewModel] SystemEvents.SessionSwitch triggered: Reason={e.Reason}");
-            if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock ||
-                e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLogon ||
-                e.Reason == Microsoft.Win32.SessionSwitchReason.ConsoleConnect ||
-                e.Reason == Microsoft.Win32.SessionSwitchReason.RemoteConnect)
+            if (_settings.PreventSleep)
             {
                 ReapplyAwakeState();
             }
@@ -971,6 +969,10 @@ namespace Lumina.ViewModels
         private System.Windows.Threading.DispatcherTimer? _preventSleepTimer;
         private DateTime? _preventSleepExpiry;
         private int _heartbeatCounter = 0;
+        private IntPtr _powerRequestHandle = IntPtr.Zero;
+        private bool _powerRequestSystemSet = false;
+        private bool _powerRequestDisplaySet = false;
+        private bool _powerRequestExecutionSet = false;
 
         public string PreventSleepRemainingText
         {
@@ -1002,15 +1004,119 @@ namespace Lumina.ViewModels
             }
         }
 
+        private void EnablePowerRequests()
+        {
+            try
+            {
+                if (_powerRequestHandle == IntPtr.Zero || _powerRequestHandle == new IntPtr(-1))
+                {
+                    var context = new NativeMethods.REASON_CONTEXT
+                    {
+                        Version = NativeMethods.POWER_REQUEST_CONTEXT_VERSION,
+                        Flags = NativeMethods.POWER_REQUEST_CONTEXT_SIMPLE_STRING,
+                        SimpleReasonString = "Luminark: Prevent Sleep and Display Off"
+                    };
+
+                    _powerRequestHandle = NativeMethods.PowerCreateRequest(ref context);
+                    if (_powerRequestHandle == IntPtr.Zero || _powerRequestHandle == new IntPtr(-1))
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        App.Log($"[Power] PowerCreateRequest failed with error: {err}");
+                        _powerRequestHandle = IntPtr.Zero;
+                    }
+                    else
+                    {
+                        App.Log($"[Power] PowerCreateRequest created handle: {_powerRequestHandle}");
+                    }
+                }
+
+                if (_powerRequestHandle != IntPtr.Zero)
+                {
+                    if (!_powerRequestSystemSet)
+                    {
+                        _powerRequestSystemSet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestSystemRequired);
+                        App.Log($"[Power] PowerSetRequest(SystemRequired): {_powerRequestSystemSet}");
+                    }
+                    if (!_powerRequestDisplaySet)
+                    {
+                        _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                        App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
+                    }
+                    if (!_powerRequestExecutionSet)
+                    {
+                        _powerRequestExecutionSet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestExecutionRequired);
+                        App.Log($"[Power] PowerSetRequest(ExecutionRequired): {_powerRequestExecutionSet}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Power] EnablePowerRequests error: {ex.Message}");
+            }
+        }
+
+        private void DisablePowerRequests()
+        {
+            try
+            {
+                if (_powerRequestHandle != IntPtr.Zero && _powerRequestHandle != new IntPtr(-1))
+                {
+                    if (_powerRequestDisplaySet)
+                    {
+                        NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                        _powerRequestDisplaySet = false;
+                    }
+                    if (_powerRequestSystemSet)
+                    {
+                        NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestSystemRequired);
+                        _powerRequestSystemSet = false;
+                    }
+                    if (_powerRequestExecutionSet)
+                    {
+                        NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestExecutionRequired);
+                        _powerRequestExecutionSet = false;
+                    }
+
+                    NativeMethods.CloseHandle(_powerRequestHandle);
+                    App.Log($"[Power] Power requests cleared and handle {_powerRequestHandle} closed");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Power] DisablePowerRequests error: {ex.Message}");
+            }
+            finally
+            {
+                _powerRequestHandle = IntPtr.Zero;
+                _powerRequestSystemSet = false;
+                _powerRequestDisplaySet = false;
+                _powerRequestExecutionSet = false;
+            }
+        }
+
         public void ReapplyAwakeState()
         {
             if (_settings.PreventSleep)
             {
+                // 1. Ensure kernel power requests are active (modern Windows 10/11 & S0 Modern Standby)
+                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestDisplaySet)
+                {
+                    EnablePowerRequests();
+                }
+
+                // 2. Reaffirm thread execution state
                 var result = NativeMethods.SetThreadExecutionState(
                     NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                     NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
                     NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
                 App.Log($"[Power] ReapplyAwakeState: SetThreadExecutionState returned {result}");
+
+                // 3. Dispatch safe zero-delta mouse nudge to reset legacy display idle timers
+                try
+                {
+                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                }
+                catch { }
             }
         }
 
@@ -1020,7 +1126,12 @@ namespace Lumina.ViewModels
             {
                 if (_settings.PreventSleep)
                 {
-                    App.Log($"[Power] Setting thread execution state: Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m)");
+                    App.Log($"[Power] Activating Prevent Sleep (duration={_settings.PreventSleepDurationMinutes}m)");
+
+                    // 1. Kernel Power Request (modern Windows 10/11 & S0 Modern Standby)
+                    EnablePowerRequests();
+
+                    // 2. Thread Execution State (legacy / defense-in-depth)
                     var result = NativeMethods.SetThreadExecutionState(
                         NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                         NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
@@ -1042,7 +1153,12 @@ namespace Lumina.ViewModels
                 {
                     StopPreventSleepTimer();
                     _preventSleepExpiry = null;
-                    App.Log("[Power] Restoring normal thread execution state");
+                    App.Log("[Power] Deactivating Prevent Sleep: restoring normal power state");
+
+                    // 1. Clear kernel power requests
+                    DisablePowerRequests();
+
+                    // 2. Clear thread execution state
                     var result = NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
                     App.Log($"[Power] Normal SetThreadExecutionState returned: {result}");
                 }
@@ -1050,7 +1166,7 @@ namespace Lumina.ViewModels
             }
             catch (Exception ex)
             {
-                App.Log($"[Power] SetThreadExecutionState error: {ex.Message}");
+                App.Log($"[Power] UpdateExecutionState error: {ex.Message}");
             }
         }
 
@@ -1282,6 +1398,7 @@ namespace Lumina.ViewModels
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
                 StopPreventSleepTimer();
+                DisablePowerRequests();
                 NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
             }
             catch { }
