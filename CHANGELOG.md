@@ -4,6 +4,20 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-09-19
+
+### Added
+- **Lock-Aware Sleep Prevention (Display Off While PC Awakens)**:
+  - Intelligently detects workstation lock and unlock events (`SystemEvents.SessionSwitch` and `WTSQuerySessionInformationW`).
+  - When workstation is locked (`Win + L` or screen saver lock):
+    - Automatically releases display keep-alive requests (`PowerRequestDisplayRequired` and `ES_DISPLAY_REQUIRED`), allowing monitors to turn off and save power.
+    - Pauses the 30-second heartbeat mouse nudge to avoid unwanted display wakeups.
+    - Firmly retains kernel `PowerRequestSystemRequired` and `PowerRequestExecutionRequired` so CPU execution, background downloads, and active tasks continue uninterrupted without entering sleep or being throttled by Windows 11 Modern Standby (DAM).
+  - When workstation is unlocked:
+    - Instantly restores display keep-alive requests and resumes the heartbeat pulse.
+
+---
+
 ## [1.1.5] - 2026-09-19
 
 ### Fixed
