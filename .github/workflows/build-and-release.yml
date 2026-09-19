@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag to build and attach assets to (e.g. v1.1.3)'
+        description: 'Release Tag to build and attach assets to (e.g. v1.1.4)'
         required: false
-        default: 'v1.1.3'
+        default: 'v1.1.4'
 
 permissions:
   contents: write
@@ -34,22 +34,26 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore -r win-x64
 
-      - name: Publish Lumina
+      - name: Publish Lumina (Framework-Dependent for Inno Setup)
         run: |
-          dotnet publish -c Release -r win-x64 --self-contained true -o publish
+          dotnet publish -c Release -r win-x64 --self-contained false -o publish-framework
           New-Item -ItemType Directory -Force -Path installer/publish
-          Copy-Item -Recurse -Force publish/* installer/publish/
+          Copy-Item -Recurse -Force publish-framework/* installer/publish/
 
       - name: Compile Inno Setup Installer
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Luminark.iss
+
+      - name: Publish Lumina (Self-Contained for MSIX / Windows Store)
+        run: |
+          dotnet publish -c Release -r win-x64 --self-contained true -o publish-selfcontained
 
       - name: Build MSIX Package
         shell: pwsh
         run: |
           $msixLayout = "msix-layout"
           New-Item -ItemType Directory -Force -Path $msixLayout
-          Copy-Item -Recurse -Force publish/* $msixLayout/
+          Copy-Item -Recurse -Force publish-selfcontained/* $msixLayout/
           Copy-Item -Force installer/msix/AppxManifest.xml $msixLayout/AppxManifest.xml
           New-Item -ItemType Directory -Force -Path "$msixLayout/Assets"
           Copy-Item -Force installer/msix/Assets/* "$msixLayout/Assets/"
