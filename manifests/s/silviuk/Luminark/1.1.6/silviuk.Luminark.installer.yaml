@@ -22,6 +22,7 @@ Dependencies:
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/silviuk/Luminark/releases/download/v1.1.6/Luminark-Setup-v1.1.6.exe
+  InstallerSha256: 6D10D1A1079F9B948F06E76F5A9A39EC07625A7B75DE5B86219AAA3CC1B97209
   ProductCode: '{D37E8420-56B0-4A9B-983C-C04C61F12345}_is1'
 ManifestType: installer
 ManifestVersion: 1.9.0
