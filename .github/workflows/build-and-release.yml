@@ -36,9 +36,9 @@ jobs:
 
       - name: Publish Lumina (Framework-Dependent for Inno Setup)
         run: |
-          dotnet publish -c Release -r win-x64 --self-contained false -o publish-framework
+          dotnet publish -c Release -r win-x64 --self-contained false -o publish
           New-Item -ItemType Directory -Force -Path installer/publish
-          Copy-Item -Recurse -Force publish-framework/* installer/publish/
+          Copy-Item -Recurse -Force publish/* installer/publish/
 
       - name: Compile Inno Setup Installer
         run: |
