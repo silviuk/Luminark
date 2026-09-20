@@ -33,5 +33,14 @@ namespace Lumina.Models
         public string LightModeShortcut { get; set; } = "Ctrl+Alt+L";
         public string ToggleThemeShortcut { get; set; } = "Ctrl+Alt+T";
         public string LockAndTurnOffShortcut { get; set; } = "Win+J";
+
+        // Key: Monitor ID, Value: Dictionary of Input Code -> Custom Name
+        public Dictionary<string, Dictionary<uint, string>> CustomInputNames { get; set; } = new();
+
+        // Key: Monitor ID, Value: List of Input Codes that should appear in the flyout dropdown
+        public Dictionary<string, List<uint>> VisibleInputCodes { get; set; } = new();
+
+        // Known external monitors for multi-host retention when display switches to another device
+        public List<string> KnownExternalMonitorIds { get; set; } = new();
     }
 }

@@ -316,26 +316,40 @@ namespace Lumina.ViewModels
 
         public string MasterBrightnessText => $"{MasterBrightness}%";
 
-        public string ConnectedMonitorsCountText => Monitors.Count switch
+        public string ConnectedMonitorsCountText
         {
-            0 => "No compatible displays detected",
-            1 => "1 Display connected",
-            _ => $"{Monitors.Count} Displays connected"
-        };
+            get
+            {
+                int activeCount = Monitors.Count(m => m.IsActive);
+                int totalCount = Monitors.Count;
+                if (totalCount == 0) return "No compatible displays detected";
+                if (activeCount == totalCount)
+                {
+                    return totalCount == 1 ? "1 Display connected" : $"{totalCount} Displays connected";
+                }
+                return $"{activeCount} Active Display{(activeCount == 1 ? "" : "s")} ({totalCount} total)";
+            }
+        }
 
         public void RefreshMonitors(bool forceRecreate = false)
         {
             var detected = _monitorService.EnumerateMonitors();
+            var detectedIds = new HashSet<string>(detected.Select(d => d.Id));
 
-            if (!forceRecreate &&
-                Monitors.Count == detected.Count &&
-                Monitors.Select(m => m.Id).SequenceEqual(detected.Select(d => d.Id)))
+            bool sameActiveSet = !forceRecreate &&
+                Monitors.Count(m => m.IsActive) == detected.Count &&
+                Monitors.Where(m => m.IsActive).Select(m => m.Id).SequenceEqual(detected.Select(d => d.Id));
+
+            if (sameActiveSet)
             {
                 // In-place update without resetting UI elements or slider focus
                 for (int i = 0; i < detected.Count; i++)
                 {
-                    var existing = Monitors[i];
                     var fresh = detected[i];
+                    var existing = Monitors.FirstOrDefault(m => m.Id == fresh.Id);
+                    if (existing == null) continue;
+
+                    existing.IsActive = true;
                     existing.PhysicalHandle = fresh.PhysicalHandle;
                     existing.SupportsAudioVolume = fresh.SupportsAudioVolume;
                     existing.SupportsAudioMute = fresh.SupportsAudioMute;
@@ -351,108 +365,246 @@ namespace Lumina.ViewModels
                         existing.ActiveInputCode = fresh.ActiveInputCode;
                         existing.SelectedInputCode = fresh.SelectedInputCode;
                     }
+
+                    foreach (var opt in existing.AllInputOptions)
+                    {
+                        opt.IsConnected = (fresh.ActiveInputCode.HasValue && opt.Code == fresh.ActiveInputCode.Value);
+                    }
                 }
-                App.Log($"[MainViewModel] RefreshMonitors: {Monitors.Count} monitors matched existing list -> updated properties in place");
+                App.Log($"[MainViewModel] RefreshMonitors: {Monitors.Count} monitors updated in place");
+                OnPropertyChanged(nameof(ConnectedMonitorsCountText));
                 return;
             }
 
-            Monitors.Clear();
+            var updatedMonitors = new List<MonitorInfo>();
             int monitorIndex = 1;
-            foreach (var mon in detected)
+
+            // 1. Add or update detected active monitors
+            foreach (var fresh in detected)
             {
-                if (_settings.CustomMonitorNames.TryGetValue(mon.Id, out var savedCustomName) && !string.IsNullOrWhiteSpace(savedCustomName))
-                {
-                    mon.CustomName = savedCustomName;
-                }
-                else
-                {
-                    // Legacy migration: check if an older transient ID like "DDC_2_2" exists for this monitor
-                    var legacyKey = _settings.CustomMonitorNames.Keys.FirstOrDefault(k =>
-                        k.EndsWith($"_{monitorIndex}") ||
-                        k.Contains(mon.FriendlyName, StringComparison.OrdinalIgnoreCase) ||
-                        k.Contains(mon.DeviceName, StringComparison.OrdinalIgnoreCase));
+                var existing = Monitors.FirstOrDefault(m => m.Id == fresh.Id);
+                var mon = existing ?? fresh;
 
-                    if (legacyKey != null && _settings.CustomMonitorNames.TryGetValue(legacyKey, out var legacyName) && !string.IsNullOrWhiteSpace(legacyName))
-                    {
-                        mon.CustomName = legacyName;
-                        _settings.CustomMonitorNames.Remove(legacyKey);
-                        _settings.CustomMonitorNames[mon.Id] = legacyName;
-                        SaveSettings();
-                    }
+                mon.IsActive = true;
+                mon.PhysicalHandle = fresh.PhysicalHandle;
+                mon.SupportsAudioVolume = fresh.SupportsAudioVolume;
+                mon.SupportsAudioMute = fresh.SupportsAudioMute;
+                mon.SupportsInputSelect = fresh.SupportsInputSelect;
+                mon.CurrentBrightness = fresh.CurrentBrightness;
+                mon.CurrentVolume = fresh.CurrentVolume;
+                mon.IsMuted = fresh.IsMuted;
+                if (fresh.ActiveInputCode.HasValue && !mon.IsSwitchingInput)
+                {
+                    mon.ActiveInputCode = fresh.ActiveInputCode;
+                    mon.SelectedInputCode = fresh.SelectedInputCode;
                 }
 
-                mon.PropertyChanged += (s, e) =>
+                if (existing == null)
                 {
-                    if (e.PropertyName == nameof(MonitorInfo.CustomName))
-                    {
-                        if (string.IsNullOrWhiteSpace(mon.CustomName))
-                        {
-                            _settings.CustomMonitorNames.Remove(mon.Id);
-                        }
-                        else
-                        {
-                            _settings.CustomMonitorNames[mon.Id] = mon.CustomName.Trim();
-                        }
-                        SaveSettings();
-                    }
-                    else if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) && !_isUpdatingMasterBrightness)
-                    {
-                        _isUpdatingIndividualBrightness = true;
-                        _monitorService.SetBrightness(mon, mon.CurrentBrightness);
-                        if (Monitors.Count > 0)
-                        {
-                            _masterBrightness = (uint)Math.Round(Monitors.Average(m => m.CurrentBrightness));
-                            OnPropertyChanged(nameof(MasterBrightness));
-                            OnPropertyChanged(nameof(MasterBrightnessText));
-                        }
-                        _isUpdatingIndividualBrightness = false;
-                    }
-                };
-                mon.OnVolumeChanged = (m, vol, muted) =>
+                    SetupMonitorEventsAndSettings(mon, monitorIndex);
+                }
+
+                foreach (var opt in mon.AllInputOptions)
                 {
-                    _monitorService.SetVolume(m, vol, muted);
-                };
+                    opt.IsConnected = (fresh.ActiveInputCode.HasValue && opt.Code == fresh.ActiveInputCode.Value);
+                }
 
-                mon.OnInputSelectionRequested = (m, targetCode) =>
-                {
-                    if (!targetCode.HasValue) return;
-
-                    if (m.ActiveInputCode.HasValue && targetCode.Value == m.ActiveInputCode.Value)
-                    {
-                        m.CancelInputSwitch();
-                        return;
-                    }
-
-                    var opt = m.InputOptions.FirstOrDefault(o => o.Code == targetCode.Value);
-                    string targetName = opt?.Name ?? $"Input (0x{targetCode.Value:X2})";
-
-                    int delay = MonitorInputSwitchDelaySeconds;
-                    if (delay <= 0)
-                    {
-                        m.CancelInputSwitch();
-                        m.ActiveInputCode = targetCode.Value;
-                        _monitorService.SetInputSource(m, targetCode.Value);
-                    }
-                    else
-                    {
-                        m.StartInputCountdown(targetCode.Value, targetName, delay, (monitorToSwitch, code) =>
-                        {
-                            _monitorService.SetInputSource(monitorToSwitch, code);
-                        });
-                    }
-                };
-
-                Monitors.Add(mon);
+                updatedMonitors.Add(mon);
                 monitorIndex++;
+            }
+
+            // 2. Retain previously known external monitors that switched to another PC/input
+            foreach (var prev in Monitors)
+            {
+                if (!detectedIds.Contains(prev.Id) && prev.Type == MonitorType.DdcCi)
+                {
+                    prev.IsActive = false;
+                    foreach (var opt in prev.AllInputOptions)
+                    {
+                        opt.IsConnected = false;
+                    }
+                    updatedMonitors.Add(prev);
+                }
+            }
+
+            Monitors.Clear();
+            foreach (var m in updatedMonitors)
+            {
+                Monitors.Add(m);
             }
 
             if (Monitors.Count > 0)
             {
-                _masterBrightness = (uint)Math.Round(Monitors.Average(m => m.CurrentBrightness));
+                var active = Monitors.Where(m => m.IsActive).ToList();
+                _masterBrightness = active.Count > 0
+                    ? (uint)Math.Round(active.Average(m => m.CurrentBrightness))
+                    : 50;
+                OnPropertyChanged(nameof(MasterBrightness));
+                OnPropertyChanged(nameof(MasterBrightnessText));
             }
-            OnPropertyChanged(nameof(MasterBrightness));
-            OnPropertyChanged(nameof(MasterBrightnessText));
+
             OnPropertyChanged(nameof(ConnectedMonitorsCountText));
+            App.Log($"[MainViewModel] RefreshMonitors completed. Total: {Monitors.Count} (Active: {Monitors.Count(m => m.IsActive)})");
+        }
+
+        private void SetupMonitorEventsAndSettings(MonitorInfo mon, int monitorIndex)
+        {
+            if (_settings.CustomMonitorNames.TryGetValue(mon.Id, out var savedCustomName) && !string.IsNullOrWhiteSpace(savedCustomName))
+            {
+                mon.CustomName = savedCustomName;
+            }
+            else
+            {
+                var legacyKey = _settings.CustomMonitorNames.Keys.FirstOrDefault(k =>
+                    k.EndsWith($"_{monitorIndex}") ||
+                    k.Contains(mon.FriendlyName, StringComparison.OrdinalIgnoreCase) ||
+                    k.Contains(mon.DeviceName, StringComparison.OrdinalIgnoreCase));
+
+                if (legacyKey != null && _settings.CustomMonitorNames.TryGetValue(legacyKey, out var legacyName) && !string.IsNullOrWhiteSpace(legacyName))
+                {
+                    mon.CustomName = legacyName;
+                    _settings.CustomMonitorNames.Remove(legacyKey);
+                    _settings.CustomMonitorNames[mon.Id] = legacyName;
+                    SaveSettings();
+                }
+            }
+
+            if (mon.Type == MonitorType.DdcCi && !_settings.KnownExternalMonitorIds.Contains(mon.Id))
+            {
+                _settings.KnownExternalMonitorIds.Add(mon.Id);
+                SaveSettings();
+            }
+
+            ConfigureMonitorInputOptions(mon);
+
+            mon.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(MonitorInfo.CustomName))
+                {
+                    if (string.IsNullOrWhiteSpace(mon.CustomName))
+                    {
+                        _settings.CustomMonitorNames.Remove(mon.Id);
+                    }
+                    else
+                    {
+                        _settings.CustomMonitorNames[mon.Id] = mon.CustomName.Trim();
+                    }
+                    SaveSettings();
+                }
+                else if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) && !_isUpdatingMasterBrightness)
+                {
+                    _isUpdatingIndividualBrightness = true;
+                    _monitorService.SetBrightness(mon, mon.CurrentBrightness);
+                    var active = Monitors.Where(m => m.IsActive).ToList();
+                    if (active.Count > 0)
+                    {
+                        _masterBrightness = (uint)Math.Round(active.Average(m => m.CurrentBrightness));
+                        OnPropertyChanged(nameof(MasterBrightness));
+                        OnPropertyChanged(nameof(MasterBrightnessText));
+                    }
+                    _isUpdatingIndividualBrightness = false;
+                }
+            };
+
+            mon.OnVolumeChanged = (m, vol, muted) =>
+            {
+                _monitorService.SetVolume(m, vol, muted);
+            };
+
+            mon.OnInputSelectionRequested = (m, targetCode) =>
+            {
+                if (!targetCode.HasValue) return;
+
+                if (m.ActiveInputCode.HasValue && targetCode.Value == m.ActiveInputCode.Value)
+                {
+                    m.CancelInputSwitch();
+                    return;
+                }
+
+                var opt = m.AllInputOptions.FirstOrDefault(o => o.Code == targetCode.Value)
+                       ?? m.InputOptions.FirstOrDefault(o => o.Code == targetCode.Value);
+                string targetName = opt?.Name ?? $"Input (0x{targetCode.Value:X2})";
+
+                int delay = MonitorInputSwitchDelaySeconds;
+                if (delay <= 0)
+                {
+                    m.CancelInputSwitch();
+                    m.ActiveInputCode = targetCode.Value;
+                    _monitorService.SetInputSource(m, targetCode.Value);
+                }
+                else
+                {
+                    m.StartInputCountdown(targetCode.Value, targetName, delay, (monitorToSwitch, code) =>
+                    {
+                        _monitorService.SetInputSource(monitorToSwitch, code);
+                    });
+                }
+            };
+        }
+
+        private void ConfigureMonitorInputOptions(MonitorInfo mon)
+        {
+            if (_settings.CustomInputNames.TryGetValue(mon.Id, out var savedInputNames))
+            {
+                foreach (var opt in mon.AllInputOptions)
+                {
+                    if (savedInputNames.TryGetValue(opt.Code, out var name) && !string.IsNullOrWhiteSpace(name))
+                    {
+                        opt.CustomName = name;
+                    }
+                }
+            }
+
+            if (_settings.VisibleInputCodes.TryGetValue(mon.Id, out var visibleCodes) && visibleCodes != null)
+            {
+                foreach (var opt in mon.AllInputOptions)
+                {
+                    opt.IsVisibleInFlyout = visibleCodes.Contains(opt.Code);
+                }
+            }
+
+            foreach (var opt in mon.AllInputOptions)
+            {
+                opt.OnConfigChanged = () =>
+                {
+                    if (!_settings.CustomInputNames.TryGetValue(mon.Id, out var inputDict))
+                    {
+                        inputDict = new Dictionary<uint, string>();
+                        _settings.CustomInputNames[mon.Id] = inputDict;
+                    }
+
+                    if (opt.HasCustomName)
+                    {
+                        inputDict[opt.Code] = opt.CustomName!.Trim();
+                    }
+                    else
+                    {
+                        inputDict.Remove(opt.Code);
+                    }
+
+                    _settings.VisibleInputCodes[mon.Id] = mon.AllInputOptions
+                        .Where(o => o.IsVisibleInFlyout)
+                        .Select(o => o.Code)
+                        .ToList();
+
+                    SaveSettings();
+                    mon.UpdateVisibleInputOptions();
+                };
+            }
+
+            mon.UpdateVisibleInputOptions();
+        }
+
+        public void ResetInputName(MonitorInfo monitor, MonitorInputOption input)
+        {
+            if (monitor == null || input == null) return;
+            input.CustomName = null;
+            if (_settings.CustomInputNames.TryGetValue(monitor.Id, out var dict))
+            {
+                dict.Remove(input.Code);
+                SaveSettings();
+            }
+            monitor.UpdateVisibleInputOptions();
         }
 
         public bool HasActiveInputSwitch => Monitors.Any(m => m.IsSwitchingInput);

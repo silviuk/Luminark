@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Lumina.Models;
@@ -145,17 +146,51 @@ namespace Lumina.Services
                                             bool currentInList = false;
                                             foreach (var opt in standardInputs)
                                             {
-                                                mon.InputOptions.Add(opt);
+                                                mon.AllInputOptions.Add(opt);
                                                 if (hasInput && opt.Code == curInput)
                                                 {
                                                     currentInList = true;
                                                 }
                                             }
 
-                                            if (hasInput && curInput > 0 && !currentInList)
+                                            // Query DDC/CI capabilities string if available
+                                            try
                                             {
-                                                var customOpt = new MonitorInputOption { Code = curInput, Name = $"Input (0x{curInput:X2})" };
-                                                mon.InputOptions.Add(customOpt);
+                                                if (NativeMethods.GetCapabilitiesStringLength(pm.hPhysicalMonitor, out uint capsLen) && capsLen > 0)
+                                                {
+                                                    var sb = new StringBuilder((int)capsLen + 1);
+                                                    if (NativeMethods.CapabilitiesRequestAndCapabilitiesReply(pm.hPhysicalMonitor, sb, capsLen))
+                                                    {
+                                                        string caps = sb.ToString();
+                                                        App.Log($"[MonitorService] Capabilities for {desc}: {caps}");
+                                                        var capsCodes = ParseCapabilitiesInputCodes(caps);
+                                                        foreach (var code in capsCodes)
+                                                        {
+                                                            if (!mon.AllInputOptions.Any(o => o.Code == code))
+                                                            {
+                                                                mon.AllInputOptions.Add(new MonitorInputOption
+                                                                {
+                                                                    Code = code,
+                                                                    DefaultName = GetPortNameForCode(code)
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                App.Log($"[MonitorService] Query capabilities error for {desc}: {ex.Message}");
+                                            }
+
+                                            if (hasInput && curInput > 0 && !currentInList && !mon.AllInputOptions.Any(o => o.Code == curInput))
+                                            {
+                                                var customOpt = new MonitorInputOption
+                                                {
+                                                    Code = curInput,
+                                                    DefaultName = GetPortNameForCode(curInput)
+                                                };
+                                                mon.AllInputOptions.Add(customOpt);
                                             }
 
                                             if (hasInput && curInput > 0)
@@ -163,11 +198,18 @@ namespace Lumina.Services
                                                 mon.ActiveInputCode = curInput;
                                                 mon.SelectedInputCode = curInput;
                                             }
-                                            else if (mon.InputOptions.Count > 0)
+                                            else if (mon.AllInputOptions.Count > 0)
                                             {
-                                                mon.ActiveInputCode = mon.InputOptions[0].Code;
-                                                mon.SelectedInputCode = mon.InputOptions[0].Code;
+                                                mon.ActiveInputCode = mon.AllInputOptions[0].Code;
+                                                mon.SelectedInputCode = mon.AllInputOptions[0].Code;
                                             }
+
+                                            foreach (var opt in mon.AllInputOptions)
+                                            {
+                                                opt.IsConnected = (hasInput && curInput > 0 && opt.Code == curInput);
+                                            }
+
+                                            mon.UpdateVisibleInputOptions();
 
                                             results.Add(mon);
                                         }
@@ -299,14 +341,69 @@ namespace Lumina.Services
         {
             return new List<MonitorInputOption>
             {
-                new MonitorInputOption { Code = 0x11, Name = "HDMI 1" },
-                new MonitorInputOption { Code = 0x12, Name = "HDMI 2" },
-                new MonitorInputOption { Code = 0x0F, Name = "DisplayPort 1" },
-                new MonitorInputOption { Code = 0x10, Name = "DisplayPort 2" },
-                new MonitorInputOption { Code = 0x13, Name = "USB-C" },
-                new MonitorInputOption { Code = 0x03, Name = "DVI 1" },
-                new MonitorInputOption { Code = 0x01, Name = "VGA 1" }
+                new MonitorInputOption { Code = 0x11, DefaultName = "HDMI 1" },
+                new MonitorInputOption { Code = 0x12, DefaultName = "HDMI 2" },
+                new MonitorInputOption { Code = 0x0F, DefaultName = "DisplayPort 1" },
+                new MonitorInputOption { Code = 0x10, DefaultName = "DisplayPort 2" },
+                new MonitorInputOption { Code = 0x13, DefaultName = "USB-C" },
+                new MonitorInputOption { Code = 0x03, DefaultName = "DVI 1" },
+                new MonitorInputOption { Code = 0x01, DefaultName = "VGA 1" }
             };
+        }
+
+        public static string GetPortNameForCode(uint code) => code switch
+        {
+            0x01 => "VGA 1",
+            0x02 => "VGA 2",
+            0x03 => "DVI 1",
+            0x04 => "DVI 2",
+            0x05 => "Composite 1",
+            0x06 => "Composite 2",
+            0x07 => "S-Video 1",
+            0x08 => "S-Video 2",
+            0x09 => "Tuner 1",
+            0x0A => "Tuner 2",
+            0x0B => "Tuner 3",
+            0x0C => "Component 1",
+            0x0D => "Component 2",
+            0x0E => "Component 3",
+            0x0F => "DisplayPort 1",
+            0x10 => "DisplayPort 2",
+            0x11 => "HDMI 1",
+            0x12 => "HDMI 2",
+            0x13 => "USB-C",
+            _ => $"Input (0x{code:X2})"
+        };
+
+        public static List<uint> ParseCapabilitiesInputCodes(string caps)
+        {
+            var list = new List<uint>();
+            if (string.IsNullOrWhiteSpace(caps)) return list;
+
+            try
+            {
+                int idx = caps.IndexOf("60(", StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    int start = idx + 3;
+                    int end = caps.IndexOf(')', start);
+                    if (end > start)
+                    {
+                        string inner = caps.Substring(start, end - start);
+                        var tokens = inner.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var t in tokens)
+                        {
+                            if (uint.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out uint code))
+                            {
+                                list.Add(code);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return list;
         }
 
         public bool SetInputSource(MonitorInfo monitor, uint inputCode)

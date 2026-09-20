@@ -578,6 +578,18 @@ namespace Lumina
             }
         }
 
+        private void OnResetInputNameClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Models.MonitorInputOption opt)
+            {
+                var monitor = System.Linq.Enumerable.FirstOrDefault(_viewModel.Monitors, m => m.AllInputOptions.Contains(opt));
+                if (monitor != null)
+                {
+                    _viewModel.ResetInputName(monitor, opt);
+                }
+            }
+        }
+
         public static void TrimMemory()
         {
             try

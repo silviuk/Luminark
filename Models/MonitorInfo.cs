@@ -13,12 +13,79 @@ namespace Lumina.Models
         Unknown
     }
 
-    public class MonitorInputOption
+    public class MonitorInputOption : INotifyPropertyChanged
     {
         public uint Code { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public string DefaultName { get; set; } = string.Empty;
+
+        private string? _customName;
+        public string? CustomName
+        {
+            get => _customName;
+            set
+            {
+                if (_customName != value)
+                {
+                    _customName = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(Name));
+                    OnPropertyChanged(nameof(DisplayName));
+                    OnPropertyChanged(nameof(HasCustomName));
+                    OnConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public bool HasCustomName => !string.IsNullOrWhiteSpace(_customName);
+
+        public string Name => !string.IsNullOrWhiteSpace(_customName) ? _customName : DefaultName;
+        public string DisplayName => Name;
+
+        public string PortCodeHex => $"0x{Code:X2}";
+
+        private bool _isVisibleInFlyout = true;
+        public bool IsVisibleInFlyout
+        {
+            get => _isVisibleInFlyout;
+            set
+            {
+                if (_isVisibleInFlyout != value)
+                {
+                    _isVisibleInFlyout = value;
+                    OnPropertyChanged();
+                    OnConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        private bool _isConnected = false;
+        public bool IsConnected
+        {
+            get => _isConnected;
+            set
+            {
+                if (_isConnected != value)
+                {
+                    _isConnected = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ConnectionStatusToolTip));
+                }
+            }
+        }
+
+        public string ConnectionStatusToolTip => IsConnected
+            ? "Active / Connected signal detected"
+            : "No active signal reported";
+
+        public Action? OnConfigChanged { get; set; }
 
         public override string ToString() => Name;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public class MonitorInfo : INotifyPropertyChanged
@@ -78,6 +145,27 @@ namespace Lumina.Models
             MonitorType.WmiInternal => "Internal Display (WMI)",
             _ => "Generic Display"
         };
+
+        private bool _isActive = true;
+        public bool IsActive
+        {
+            get => _isActive;
+            set
+            {
+                if (_isActive != value)
+                {
+                    _isActive = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsInactive));
+                    OnPropertyChanged(nameof(StatusBadgeText));
+                    OnPropertyChanged(nameof(CardOpacity));
+                }
+            }
+        }
+
+        public bool IsInactive => !IsActive;
+        public string StatusBadgeText => IsActive ? "Active" : "Inactive (Other Input / Device)";
+        public double CardOpacity => IsActive ? 1.0 : 0.65;
         #endregion
 
         #region Audio Volume & Mute
@@ -158,6 +246,7 @@ namespace Lumina.Models
 
         #region Input Selection & Timer
         public bool SupportsInputSelect { get; set; } = false;
+        public ObservableCollection<MonitorInputOption> AllInputOptions { get; } = new();
         public ObservableCollection<MonitorInputOption> InputOptions { get; } = new();
 
         private uint? _activeInputCode;
@@ -170,6 +259,12 @@ namespace Lumina.Models
                 {
                     _activeInputCode = value;
                     OnPropertyChanged();
+
+                    foreach (var opt in AllInputOptions)
+                    {
+                        opt.IsConnected = (_activeInputCode.HasValue && opt.Code == _activeInputCode.Value);
+                    }
+
                     if (!IsSwitchingInput)
                     {
                         _selectedInputCode = value;
@@ -192,6 +287,38 @@ namespace Lumina.Models
                     OnInputSelectionRequested?.Invoke(this, value);
                 }
             }
+        }
+
+        public void UpdateVisibleInputOptions()
+        {
+            var visibleList = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(AllInputOptions, o => o.IsVisibleInFlyout));
+            if (visibleList.Count == 0 && AllInputOptions.Count > 0)
+            {
+                visibleList = System.Linq.Enumerable.ToList(AllInputOptions);
+            }
+
+            InputOptions.Clear();
+            foreach (var item in visibleList)
+            {
+                InputOptions.Add(item);
+            }
+
+            if (SelectedInputCode.HasValue && !System.Linq.Enumerable.Any(InputOptions, o => o.Code == SelectedInputCode.Value))
+            {
+                if (ActiveInputCode.HasValue && System.Linq.Enumerable.Any(InputOptions, o => o.Code == ActiveInputCode.Value))
+                {
+                    SelectedInputCode = ActiveInputCode;
+                }
+                else if (InputOptions.Count > 0)
+                {
+                    SelectedInputCode = InputOptions[0].Code;
+                }
+            }
+        }
+
+        public void ResetInputName(MonitorInputOption opt)
+        {
+            opt.CustomName = null;
         }
 
         private DispatcherTimer? _inputCountdownTimer;
@@ -249,6 +376,10 @@ namespace Lumina.Models
                     IsSwitchingInput = false;
                     _activeInputCode = targetCode;
                     OnPropertyChanged(nameof(ActiveInputCode));
+                    foreach (var opt in AllInputOptions)
+                    {
+                        opt.IsConnected = (opt.Code == targetCode);
+                    }
                     onExecute(this, targetCode);
                 }
             };

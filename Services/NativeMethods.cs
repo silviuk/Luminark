@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Lumina.Services
 {
@@ -140,6 +141,17 @@ namespace Lumina.Services
             IntPtr hMonitor,
             byte bVCPCode,
             uint dwNewValue);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        public static extern bool GetCapabilitiesStringLength(
+            IntPtr hMonitor,
+            out uint pdwCapabilitiesStringLengthInCharacters);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        public static extern bool CapabilitiesRequestAndCapabilitiesReply(
+            IntPtr hMonitor,
+            [Out] StringBuilder pszASCIICapabilitiesString,
+            uint dwCapabilitiesStringLengthInCharacters);
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessageTimeout(

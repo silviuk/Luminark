@@ -248,7 +248,8 @@
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="10,8"
-                                Margin="0,0,0,6">
+                                Margin="0,0,0,6"
+                                Opacity="{Binding CardOpacity}">
                             <StackPanel>
                                 <!-- Monitor Name & Brightness Percentage -->
                                 <Grid Margin="0,0,0,4">
@@ -258,9 +259,22 @@
                                                    FontSize="11"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
-                                                   MaxWidth="230"
+                                                   MaxWidth="180"
                                                    VerticalAlignment="Center"
                                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                        <Border Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="4,1"
+                                                Margin="6,0,0,0"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding IsInactive, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="Inactive"
+                                                       FontSize="9"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                                        </Border>
                                     </StackPanel>
                                     <TextBlock Text="{Binding CurrentBrightness, StringFormat='{}{0}%'}"
                                                FontSize="11"
@@ -273,11 +287,14 @@
                                 <Slider Value="{Binding CurrentBrightness, Mode=TwoWay}"
                                         Minimum="{Binding MinBrightness}"
                                         Maximum="{Binding MaxBrightness}"
+                                        IsEnabled="{Binding IsActive}"
                                         SmallChange="5"
                                         LargeChange="10" />
 
                                 <!-- Volume Control (Shown for monitors supporting audio) -->
-                                <Grid Margin="0,6,0,0" Visibility="{Binding SupportsAudioVolume, Converter={StaticResource BoolToVis}}">
+                                <Grid Margin="0,6,0,0"
+                                      IsEnabled="{Binding IsActive}"
+                                      Visibility="{Binding SupportsAudioVolume, Converter={StaticResource BoolToVis}}">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -325,10 +342,25 @@
                                               Padding="6,1"
                                               FontSize="11"
                                               ItemsSource="{Binding InputOptions}"
-                                              DisplayMemberPath="Name"
                                               SelectedValuePath="Code"
                                               SelectedValue="{Binding SelectedInputCode, Mode=TwoWay}"
-                                              VerticalAlignment="Center" />
+                                              VerticalAlignment="Center">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}" FontSize="11" VerticalAlignment="Center" />
+                                                    <ui:SymbolIcon Symbol="Checkmark12"
+                                                                   FontSize="11"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#10B981"
+                                                                   Margin="6,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   ToolTip="Connected signal"
+                                                                   Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                 </Grid>
 
                                 <!-- Countdown Banner when input switch timer is running -->
