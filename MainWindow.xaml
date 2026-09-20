@@ -727,13 +727,45 @@
 
                                 <Separator Margin="0,12,0,12" />
 
+                                <!-- Lock & Turn Off Screen Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Lock &amp; Turn Off Screen" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Instantly lock workstation and turn off all monitors" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding LockAndTurnOffShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Win+J). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearLockShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
                                 <!-- Reset to Defaults -->
                                 <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Reset all shortcuts to defaults (Ctrl+Alt+D, Ctrl+Alt+L, Ctrl+Alt+T)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="0" Text="Reset all shortcuts to defaults (Ctrl+Alt+D, Ctrl+Alt+L, Ctrl+Alt+T, Win+J)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <ui:Button Grid.Column="1"
                                                Appearance="Secondary"
                                                Padding="12,6"

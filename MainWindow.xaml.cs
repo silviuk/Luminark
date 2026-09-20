@@ -227,6 +227,16 @@ namespace Lumina
                 });
                 contextMenu.Items.Add(exitItem);
 
+                contextMenu.Opening += (s, e) =>
+                {
+                    toggleThemeItem.ShortcutKeyDisplayString = _viewModel.EnableGlobalShortcuts && !string.Equals(_viewModel.ToggleThemeShortcut, "None", StringComparison.OrdinalIgnoreCase)
+                        ? _viewModel.ToggleThemeShortcut
+                        : string.Empty;
+                    lockItem.ShortcutKeyDisplayString = _viewModel.EnableGlobalShortcuts && !string.Equals(_viewModel.LockAndTurnOffShortcut, "None", StringComparison.OrdinalIgnoreCase)
+                        ? _viewModel.LockAndTurnOffShortcut
+                        : string.Empty;
+                };
+
                 _notifyIcon.ContextMenuStrip = contextMenu;
                 App.Log("[MainWindow] NotifyIcon created and configured successfully");
             }
@@ -511,7 +521,9 @@ namespace Lumina
             if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control)) parts.Add("Ctrl");
             if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) parts.Add("Alt");
             if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift)) parts.Add("Shift");
-            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Windows)) parts.Add("Win");
+            if (modifiers.HasFlag(System.Windows.Input.ModifierKeys.Windows) ||
+                System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) ||
+                System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin)) parts.Add("Win");
 
             if (parts.Count == 0)
             {
@@ -546,6 +558,11 @@ namespace Lumina
         private void OnClearToggleShortcutClicked(object sender, RoutedEventArgs e)
         {
             _viewModel.ToggleThemeShortcut = "None";
+        }
+
+        private void OnClearLockShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.LockAndTurnOffShortcut = "None";
         }
 
         private void OnResetShortcutsClicked(object sender, RoutedEventArgs e)

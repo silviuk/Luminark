@@ -137,6 +137,7 @@
                 <ui:Button Grid.Column="2"
                            Appearance="Secondary"
                            Click="OnLockAndTurnOffClicked"
+                           ToolTip="{Binding LockAndTurnOffToolTip}"
                            HorizontalAlignment="Stretch"
                            Padding="6,8">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">

@@ -11,6 +11,7 @@ namespace Lumina.Services
         public const int HOTKEY_ID_DARK = 9001;
         public const int HOTKEY_ID_LIGHT = 9002;
         public const int HOTKEY_ID_TOGGLE = 9003;
+        public const int HOTKEY_ID_LOCK_SCREEN = 9004;
 
         private IntPtr _hwnd;
         private readonly MainViewModel _viewModel;
@@ -39,6 +40,7 @@ namespace Lumina.Services
             RegisterSingle(HOTKEY_ID_DARK, _viewModel.DarkModeShortcut, "Dark Mode");
             RegisterSingle(HOTKEY_ID_LIGHT, _viewModel.LightModeShortcut, "Light Mode");
             RegisterSingle(HOTKEY_ID_TOGGLE, _viewModel.ToggleThemeShortcut, "Toggle Theme");
+            RegisterSingle(HOTKEY_ID_LOCK_SCREEN, _viewModel.LockAndTurnOffShortcut, "Lock and Turn Off Screen");
         }
 
         private void RegisterSingle(int id, string? shortcut, string description)
@@ -97,6 +99,11 @@ namespace Lumina.Services
                 case HOTKEY_ID_TOGGLE:
                     App.Log("[HotkeyService] Hotkey triggered: Toggle Theme");
                     _viewModel.ToggleTheme();
+                    return true;
+
+                case HOTKEY_ID_LOCK_SCREEN:
+                    App.Log("[HotkeyService] Hotkey triggered: Lock and Turn Off Screen");
+                    _viewModel.StartLockAndTurnOff();
                     return true;
             }
 

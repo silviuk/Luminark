@@ -903,6 +903,7 @@ namespace Lumina.ViewModels
                 {
                     _settings.EnableGlobalShortcuts = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(LockAndTurnOffToolTip));
                     SaveSettings();
                     ShortcutsConfigChanged?.Invoke();
                 }
@@ -954,16 +955,47 @@ namespace Lumina.ViewModels
             }
         }
 
+        public string LockAndTurnOffShortcut
+        {
+            get => _settings.LockAndTurnOffShortcut ?? "Win+J";
+            set
+            {
+                if (_settings.LockAndTurnOffShortcut != value)
+                {
+                    _settings.LockAndTurnOffShortcut = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LockAndTurnOffToolTip));
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public string LockAndTurnOffToolTip
+        {
+            get
+            {
+                if (EnableGlobalShortcuts && !string.IsNullOrWhiteSpace(LockAndTurnOffShortcut) && !LockAndTurnOffShortcut.Equals("None", StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"Lock Workstation & Turn Off Monitors ({LockAndTurnOffShortcut})";
+                }
+                return "Lock Workstation & Turn Off Monitors";
+            }
+        }
+
         public void ResetShortcutsToDefaults()
         {
             _settings.EnableGlobalShortcuts = true;
             _settings.DarkModeShortcut = "Ctrl+Alt+D";
             _settings.LightModeShortcut = "Ctrl+Alt+L";
             _settings.ToggleThemeShortcut = "Ctrl+Alt+T";
+            _settings.LockAndTurnOffShortcut = "Win+J";
             OnPropertyChanged(nameof(EnableGlobalShortcuts));
             OnPropertyChanged(nameof(DarkModeShortcut));
             OnPropertyChanged(nameof(LightModeShortcut));
             OnPropertyChanged(nameof(ToggleThemeShortcut));
+            OnPropertyChanged(nameof(LockAndTurnOffShortcut));
+            OnPropertyChanged(nameof(LockAndTurnOffToolTip));
             SaveSettings();
             ShortcutsConfigChanged?.Invoke();
         }

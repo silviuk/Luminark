@@ -32,5 +32,6 @@ namespace Lumina.Models
         public string DarkModeShortcut { get; set; } = "Ctrl+Alt+D";
         public string LightModeShortcut { get; set; } = "Ctrl+Alt+L";
         public string ToggleThemeShortcut { get; set; } = "Ctrl+Alt+T";
+        public string LockAndTurnOffShortcut { get; set; } = "Win+J";
     }
 }
