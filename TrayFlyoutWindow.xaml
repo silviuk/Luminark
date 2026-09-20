@@ -4,6 +4,7 @@
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Luminark Quick Controls"
         Width="360"
+        WindowStartupLocation="Manual"
         SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -223,11 +224,13 @@
             </Border>
 
             <!-- 5. Individual Monitors (Visible when unlinked) -->
-            <ItemsControl Grid.Row="5"
-                          ItemsSource="{Binding Monitors}"
+            <ScrollViewer Grid.Row="5"
+                          MaxHeight="260"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
                           Margin="0,4,0,0">
-                <ItemsControl.Style>
-                    <Style TargetType="ItemsControl">
+                <ScrollViewer.Style>
+                    <Style TargetType="ScrollViewer">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsMonitorsLinked}" Value="False">
@@ -235,7 +238,8 @@
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </ItemsControl.Style>
+                </ScrollViewer.Style>
+                <ItemsControl ItemsSource="{Binding Monitors}" Margin="0,0,4,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
@@ -361,6 +365,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            </ScrollViewer>
         </Grid>
     </Border>
 </Window>

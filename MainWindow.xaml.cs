@@ -19,6 +19,7 @@ namespace Lumina
         private TrayScrollHook? _scrollHook;
         private HotkeyService? _hotkeyService;
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
+        private System.Drawing.Point _lastClickPos;
         private bool _isExplicitExit = false;
         private bool _isSysCommandClose = false;
 
@@ -139,18 +140,26 @@ namespace Lumina
 
                 _clickTimer = new System.Windows.Threading.DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime)
+                    Interval = TimeSpan.FromMilliseconds(Math.Min(220, System.Windows.Forms.SystemInformation.DoubleClickTime))
                 };
                 _clickTimer.Tick += (s, e) =>
                 {
                     _clickTimer.Stop();
-                    Dispatcher.Invoke(() => _flyoutWindow?.ToggleVisibility());
+                    Dispatcher.Invoke(() => _flyoutWindow?.ToggleVisibility(_lastClickPos));
+                };
+
+                _notifyIcon.MouseDown += (s, e) =>
+                {
+                    _lastClickPos = System.Windows.Forms.Cursor.Position;
+                    _flyoutWindow?.SetAnchorPoint(_lastClickPos);
                 };
 
                 _notifyIcon.MouseClick += (s, e) =>
                 {
                     if (e.Button == MouseButtons.Left)
                     {
+                        _lastClickPos = System.Windows.Forms.Cursor.Position;
+                        _flyoutWindow?.SetAnchorPoint(_lastClickPos);
                         _clickTimer.Stop();
                         _clickTimer.Start();
                     }
@@ -172,7 +181,7 @@ namespace Lumina
                 };
 
                 var contextMenu = new ContextMenuStrip();
-                var openFlyoutItem = new ToolStripMenuItem("Quick Controls", null, (s, e) => Dispatcher.Invoke(() => _flyoutWindow?.ShowNearTray()));
+                var openFlyoutItem = new ToolStripMenuItem("Quick Controls", null, (s, e) => Dispatcher.Invoke(() => _flyoutWindow?.ShowNearTray(_lastClickPos)));
                 contextMenu.Items.Add(openFlyoutItem);
 
                 var openItem = new ToolStripMenuItem("Open Luminark Settings", null, (s, e) => ShowAndActivate())

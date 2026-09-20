@@ -17,6 +17,7 @@ namespace Lumina.Services
         public event Action<int>? Scrolled;
 
         private System.Drawing.Point _lastHoverPos;
+        public System.Drawing.Point? LastHoverPosition => _lastHoverPos != System.Drawing.Point.Empty ? _lastHoverPos : null;
         private DateTime _lastHoverTime = DateTime.MinValue;
         private bool _isHoveringIcon = false;
 

@@ -64,13 +64,34 @@ namespace Lumina
             };
         }
 
-        public void ShowNearTray()
+        private System.Drawing.Point? _lastAnchorPoint;
+
+        public void SetAnchorPoint(System.Drawing.Point pt)
         {
-            UpdatePosition();
+            _lastAnchorPoint = pt;
+        }
+
+        public void ShowNearTray(System.Drawing.Point? anchorPoint = null)
+        {
+            if (anchorPoint.HasValue && anchorPoint.Value != System.Drawing.Point.Empty)
+            {
+                _lastAnchorPoint = anchorPoint;
+            }
+
+            UpdatePosition(_lastAnchorPoint);
             UpdateDwmTheme();
             Show();
             Activate();
             Focus();
+
+            // Perform secondary pass once visual tree and font styles are realized on target monitor
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+            {
+                if (IsVisible)
+                {
+                    UpdatePosition(_lastAnchorPoint);
+                }
+            });
         }
 
         private void UpdateDwmTheme()
@@ -87,7 +108,7 @@ namespace Lumina
             catch { }
         }
 
-        public void ToggleVisibility()
+        public void ToggleVisibility(System.Drawing.Point? anchorPoint = null)
         {
             if (IsVisible)
             {
@@ -98,69 +119,202 @@ namespace Lumina
             }
             else
             {
-                ShowNearTray();
+                ShowNearTray(anchorPoint);
             }
         }
 
-        private void UpdatePosition()
+        private static bool IsValidRectOnAnyScreen(NativeMethods.Rect rect)
         {
-            double scale = 1.0;
-            var source = PresentationSource.FromVisual(this);
-            if (source?.CompositionTarget != null)
+            if (rect.Right <= rect.Left || rect.Bottom <= rect.Top) return false;
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (width > 300 || height > 300 || width < 4 || height < 4) return false;
+
+            int centerX = (rect.Left + rect.Right) / 2;
+            int centerY = (rect.Top + rect.Bottom) / 2;
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
             {
-                scale = source.CompositionTarget.TransformToDevice.M11;
+                if (screen.Bounds.Contains(centerX, centerY))
+                {
+                    return true;
+                }
             }
+            return false;
+        }
 
-            var workArea = SystemParameters.WorkArea;
-            double windowWidth = Width;
-            double windowHeight = ActualHeight > 0 ? ActualHeight : 440;
-
-            if (_scrollHook.TryGetTrayIconRect(out var rect))
+        private void UpdatePosition(System.Drawing.Point? fallbackPoint = null)
+        {
+            try
             {
-                double iconLeft = rect.Left / scale;
-                double iconRight = rect.Right / scale;
-                double iconTop = rect.Top / scale;
-                double iconBottom = rect.Bottom / scale;
+                // 1. Determine anchor target: prefer actual tray icon bounding rect from Shell
+                NativeMethods.Rect iconRect = default;
+                bool hasValidIconRect = _scrollHook.TryGetTrayIconRect(out iconRect) && IsValidRectOnAnyScreen(iconRect);
 
-                // Center horizontally over tray icon
-                double left = iconLeft - (windowWidth / 2.0) + ((iconRight - iconLeft) / 2.0);
-                double top = iconTop - windowHeight - 10;
-
-                // If taskbar is on top
-                if (top < workArea.Top)
+                System.Drawing.Point targetPoint;
+                if (hasValidIconRect)
                 {
-                    top = iconBottom + 10;
+                    targetPoint = new System.Drawing.Point(
+                        (iconRect.Left + iconRect.Right) / 2,
+                        (iconRect.Top + iconRect.Bottom) / 2);
+                }
+                else if (fallbackPoint.HasValue && fallbackPoint.Value != System.Drawing.Point.Empty)
+                {
+                    targetPoint = fallbackPoint.Value;
+                }
+                else if (_scrollHook.LastHoverPosition.HasValue)
+                {
+                    targetPoint = _scrollHook.LastHoverPosition.Value;
+                }
+                else
+                {
+                    NativeMethods.GetCursorPos(out var curPos);
+                    targetPoint = new System.Drawing.Point(curPos.x, curPos.y);
                 }
 
-                // Keep inside screen bounds
-                if (left + windowWidth > workArea.Right - 8)
+                // 2. Identify target Screen containing the icon/anchor
+                var targetScreen = System.Windows.Forms.Screen.FromPoint(targetPoint)
+                                   ?? System.Windows.Forms.Screen.PrimaryScreen
+                                   ?? (System.Windows.Forms.Screen.AllScreens.Length > 0 ? System.Windows.Forms.Screen.AllScreens[0] : null);
+
+                if (targetScreen == null) return;
+
+                var screenBounds = targetScreen.Bounds;
+                var workArea = targetScreen.WorkingArea;
+
+                // 3. Obtain monitor DPI scale
+                double dpiScaleX = 1.0;
+                double dpiScaleY = 1.0;
+                try
                 {
-                    left = workArea.Right - windowWidth - 8;
+                    var pt = new NativeMethods.POINT { x = targetPoint.X, y = targetPoint.Y };
+                    IntPtr hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                    if (hMonitor != IntPtr.Zero && NativeMethods.GetDpiForMonitor(hMonitor, 0, out uint dpiX, out uint dpiY) == 0 && dpiX > 0 && dpiY > 0)
+                    {
+                        dpiScaleX = dpiX / 96.0;
+                        dpiScaleY = dpiY / 96.0;
+                    }
+                    else
+                    {
+                        var dpi = VisualTreeHelper.GetDpi(this);
+                        dpiScaleX = dpi.DpiScaleX;
+                        dpiScaleY = dpi.DpiScaleY;
+                    }
                 }
-                if (left < workArea.Left + 8)
+                catch
                 {
-                    left = workArea.Left + 8;
-                }
-                if (top + windowHeight > workArea.Bottom - 8)
-                {
-                    top = workArea.Bottom - windowHeight - 8;
+                    var dpi = VisualTreeHelper.GetDpi(this);
+                    dpiScaleX = dpi.DpiScaleX;
+                    dpiScaleY = dpi.DpiScaleY;
                 }
 
-                Left = left;
-                Top = top;
+                if (dpiScaleX <= 0) dpiScaleX = 1.0;
+                if (dpiScaleY <= 0) dpiScaleY = 1.0;
+
+                // 4. Measure layout size in DIPs and enforce MaxHeight
+                double maxAllowedDipHeight = Math.Max(240, (workArea.Height / dpiScaleY) - 20);
+                MaxHeight = maxAllowedDipHeight;
+
+                Measure(new Size(Width, maxAllowedDipHeight));
+                double windowWidth = ActualWidth > 0 ? ActualWidth : Width;
+                double windowHeight = DesiredSize.Height > 0 ? DesiredSize.Height : (ActualHeight > 0 ? ActualHeight : 460);
+                windowHeight = Math.Min(windowHeight, maxAllowedDipHeight);
+
+                double physWidth = windowWidth * dpiScaleX;
+                double physHeight = windowHeight * dpiScaleY;
+
+                // 5. Determine Taskbar edge on this monitor
+                bool taskbarAtBottom = workArea.Bottom < screenBounds.Bottom;
+                bool taskbarAtTop = workArea.Top > screenBounds.Top;
+                bool taskbarAtRight = workArea.Right < screenBounds.Right;
+                bool taskbarAtLeft = workArea.Left > screenBounds.Left;
+
+                double physLeft;
+                double physTop;
+                int marginX = (int)Math.Round(12 * dpiScaleX);
+                int marginY = (int)Math.Round(8 * dpiScaleY);
+
+                if (taskbarAtBottom)
+                {
+                    // Taskbar is at the bottom: place flyout directly above taskbar
+                    double anchorTop = hasValidIconRect ? Math.Min(workArea.Bottom, iconRect.Top) : workArea.Bottom;
+                    physTop = anchorTop - physHeight - marginY;
+                    physLeft = targetPoint.X - (physWidth / 2.0);
+                }
+                else if (taskbarAtTop)
+                {
+                    // Taskbar is at the top: place flyout directly below taskbar
+                    double anchorBottom = hasValidIconRect ? Math.Max(workArea.Top, iconRect.Bottom) : workArea.Top;
+                    physTop = anchorBottom + marginY;
+                    physLeft = targetPoint.X - (physWidth / 2.0);
+                }
+                else if (taskbarAtRight)
+                {
+                    // Taskbar is on the right: place flyout to the left of taskbar
+                    double anchorLeft = hasValidIconRect ? Math.Min(workArea.Right, iconRect.Left) : workArea.Right;
+                    physLeft = anchorLeft - physWidth - marginX;
+                    physTop = targetPoint.Y - (physHeight / 2.0);
+                }
+                else if (taskbarAtLeft)
+                {
+                    // Taskbar is on the left: place flyout to the right of taskbar
+                    double anchorRight = hasValidIconRect ? Math.Max(workArea.Left, iconRect.Right) : workArea.Left;
+                    physLeft = anchorRight + marginX;
+                    physTop = targetPoint.Y - (physHeight / 2.0);
+                }
+                else
+                {
+                    // Auto-hidden taskbar or no taskbar on this monitor
+                    if (targetPoint.Y > workArea.Top + workArea.Height / 2)
+                    {
+                        physTop = workArea.Bottom - physHeight - marginY;
+                    }
+                    else
+                    {
+                        physTop = workArea.Top + marginY;
+                    }
+                    physLeft = targetPoint.X - (physWidth / 2.0);
+                }
+
+                // 6. Firmly clamp within target screen's WorkArea to guarantee 100% full visibility
+                if (physLeft + physWidth > workArea.Right - marginX)
+                {
+                    physLeft = workArea.Right - physWidth - marginX;
+                }
+                if (physLeft < workArea.Left + marginX)
+                {
+                    physLeft = workArea.Left + marginX;
+                }
+                if (physTop + physHeight > workArea.Bottom - marginY)
+                {
+                    physTop = workArea.Bottom - physHeight - marginY;
+                }
+                if (physTop < workArea.Top + marginY)
+                {
+                    physTop = workArea.Top + marginY;
+                }
+
+                // 7. Apply to WPF and Win32
+                Left = physLeft / dpiScaleX;
+                Top = physTop / dpiScaleY;
+
+                var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                if (helper.Handle != IntPtr.Zero)
+                {
+                    NativeMethods.SetWindowPos(
+                        helper.Handle,
+                        NativeMethods.HWND_TOPMOST,
+                        (int)Math.Round(physLeft),
+                        (int)Math.Round(physTop),
+                        (int)Math.Round(physWidth),
+                        (int)Math.Round(physHeight),
+                        NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+                }
+
+                App.Log($"[TrayFlyout] Positioned on {targetScreen.DeviceName}: Left={Left:F1}, Top={Top:F1}, W={windowWidth:F1}, H={windowHeight:F1}, dpi={dpiScaleX:F2}");
             }
-            else
+            catch (Exception ex)
             {
-                // Fallback to cursor position
-                NativeMethods.GetCursorPos(out var pt);
-                double curX = pt.x / scale;
-                double curY = pt.y / scale;
-
-                double left = Math.Min(curX - (windowWidth / 2), workArea.Right - windowWidth - 12);
-                double top = Math.Max(workArea.Top + 12, curY - windowHeight - 12);
-
-                Left = Math.Max(workArea.Left + 12, left);
-                Top = top;
+                App.Log($"[TrayFlyout] UpdatePosition error: {ex.Message}");
             }
         }
 
