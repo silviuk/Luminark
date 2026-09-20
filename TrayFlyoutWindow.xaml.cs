@@ -214,7 +214,7 @@ namespace Lumina
                 double maxAllowedDipHeight = Math.Max(240, (workArea.Height / dpiScaleY) - 20);
                 MaxHeight = maxAllowedDipHeight;
 
-                Measure(new Size(Width, maxAllowedDipHeight));
+                Measure(new System.Windows.Size(Width, maxAllowedDipHeight));
                 double windowWidth = ActualWidth > 0 ? ActualWidth : Width;
                 double windowHeight = DesiredSize.Height > 0 ? DesiredSize.Height : (ActualHeight > 0 ? ActualHeight : 460);
                 windowHeight = Math.Min(windowHeight, maxAllowedDipHeight);
