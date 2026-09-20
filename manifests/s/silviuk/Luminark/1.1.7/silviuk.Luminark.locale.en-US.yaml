@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+
+PackageIdentifier: silviuk.Luminark
+PackageVersion: 1.1.7
+PackageLocale: en-US
+Publisher: Silviu Vlasceanu
+PublisherUrl: https://github.com/silviuk/Luminark
+PublisherSupportUrl: https://github.com/silviuk/Luminark/issues
+Author: Silviu Vlasceanu
+PackageName: Luminark
+PackageUrl: https://github.com/silviuk/Luminark
+License: MIT
+LicenseUrl: https://github.com/silviuk/Luminark/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Silviu Vlasceanu
+CopyrightUrl: https://github.com/silviuk/Luminark/blob/main/LICENSE
+ShortDescription: Dynamic Windows 11 Theme, Night Light & Multi-Monitor Hardware Brightness Controller
+Description: |-
+  Luminark is a native Windows 11 utility engineered to automatically harmonize your display environment.
+  It synchronizes Windows system and app themes with day/night schedules or Windows Night Light,
+  and provides seamless hardware-level multi-monitor brightness control via DDC/CI and WMI.
+Moniker: luminark
+Tags:
+- brightness
+- dark-mode
+- ddc-ci
+- display
+- fluent
+- monitor
+- night-light
+- schedule
+- theme
+- windows-11
+ReleaseNotes: |-
+  What's New in Luminark v1.1.7:
+  - Video Input Sources Customization: Manage, rename, and filter monitor inputs (HDMI, DP, USB-C) for the quick controls dropdown.
+  - Active Signal Indicators: Green checkmarks next to inputs reporting active connected signals.
+  - Inactive Monitor Retention: Retains displays switched to other devices/PCs so you can easily switch them back.
+  - Configurable Hotkey: Press Win+J to instantly lock workstation and turn off displays while keeping the PC awake.
+  - Positioning Fix: Multi-monitor and DPI-aware positioning guarantees the quick controls flyout is always fully visible.
+ReleaseNotesUrl: https://github.com/silviuk/Luminark/releases/tag/v1.1.7
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

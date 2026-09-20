@@ -4,6 +4,29 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7] - 2026-09-20
+
+### Added
+- **Video Input Sources Customization & Filtering**:
+  - Full management of external monitor video input sources (HDMI, DisplayPort, USB-C, DVI, VGA) in the Main Window.
+  - Per-port checkboxes to choose exactly which inputs appear in the quick controls mini window dropdown.
+  - User-defined friendly input names (e.g., *"Work Laptop"*, *"Gaming PC"*, *"PS5"*) with instant synchronization across the Main Window and flyout.
+  - Connected signal indicator: green checkmark (`✔`) displayed next to inputs reporting an active video signal in both the Main Window and mini window dropdown.
+- **Multi-Host Inactive Monitor Retention**:
+  - When an external monitor is switched to another host/PC and removed from Windows desktop topology, Luminark retains the display marked with an *"Inactive (Other Input / Device)"* badge.
+  - Input selection dropdown remains fully interactive on inactive displays, allowing users to switch back to this host with a single click.
+- **Global Hotkey for Lock & Turn Off Screen**:
+  - Added configurable global keyboard shortcut (`Win+J` by default) to instantly lock the workstation and power down monitors while maintaining system keep-alive.
+  - Shortcut recorder, clear button, and defaults reset in Settings.
+  - Shortcut key display string dynamically shown in the system tray context menu.
+
+### Fixed
+- **Tray Quick Controls Mini Window Positioning**:
+  - Fixed anchor position issues across multi-monitor setups and varied taskbar alignments (top, bottom, left, right).
+  - Accurate per-monitor DPI scaling and viewport boundary clamping to ensure 100% visibility at all times.
+
+---
+
 ## [1.1.6] - 2026-09-19
 
 ### Added
