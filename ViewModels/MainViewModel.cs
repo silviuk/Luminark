@@ -101,12 +101,12 @@ namespace Lumina.ViewModels
             if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock)
             {
                 _isWorkstationLocked = true;
-                App.Log("[Power] Workstation locked: screen can turn off, PC will stay awake");
+                App.Log("[Power] Workstation locked");
             }
             else if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)
             {
                 _isWorkstationLocked = false;
-                App.Log("[Power] Workstation unlocked: restoring display awake state");
+                App.Log("[Power] Workstation unlocked: restoring displays and awake state");
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     try
@@ -115,6 +115,29 @@ namespace Lumina.ViewModels
                     }
                     catch { }
                 });
+
+                if (_savedInternalBrightness.HasValue)
+                {
+                    var restoreVal = _savedInternalBrightness.Value;
+                    _savedInternalBrightness = null;
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            _monitorService.SetInternalBrightness(restoreVal);
+                            App.Log($"[Power] Restored internal display brightness to {restoreVal}%");
+                            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                            {
+                                var internalMon = Monitors.FirstOrDefault(m => m.Type == Models.MonitorType.WmiInternal);
+                                if (internalMon != null)
+                                {
+                                    internalMon.CurrentBrightness = restoreVal;
+                                }
+                            });
+                        }
+                        catch { }
+                    });
+                }
             }
 
             if (_settings.PreventSleep)
@@ -1181,6 +1204,7 @@ namespace Lumina.ViewModels
         private bool _powerRequestExecutionSet = false;
         private bool _powerRequestAwayModeSet = false;
         private bool _isWorkstationLocked = false;
+        private uint? _savedInternalBrightness = null;
 
         public string PreventSleepRemainingText
         {
@@ -1261,23 +1285,13 @@ namespace Lumina.ViewModels
                         App.Log($"[Power] PowerSetRequest(AwayModeRequired): {_powerRequestAwayModeSet}");
                     }
 
-                    // 4. Keep display on only when unlocked; allow screen to sleep when locked
-                    if (!_isWorkstationLocked)
+                    // 4. Always keep display required while PreventSleep is active.
+                    // On S0 Modern Standby laptops, allowing the display pipeline to power down
+                    // forces the Intel/AMD SoC into Modern Standby sleep (suspending CPU and Wi-Fi).
+                    if (!_powerRequestDisplaySet)
                     {
-                        if (!_powerRequestDisplaySet)
-                        {
-                            _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-                            App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
-                        }
-                    }
-                    else
-                    {
-                        if (_powerRequestDisplaySet)
-                        {
-                            NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-                            _powerRequestDisplaySet = false;
-                            App.Log("[Power] Cleared PowerRequestDisplayRequired (workstation locked)");
-                        }
+                        _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                        App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
                     }
                 }
             }
@@ -1337,25 +1351,16 @@ namespace Lumina.ViewModels
             if (_settings.PreventSleep)
             {
                 // 1. Ensure kernel power requests are active (modern Windows 10/11 & S0 Modern Standby)
-                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestExecutionSet || !_powerRequestAwayModeSet || (!_isWorkstationLocked && !_powerRequestDisplaySet))
+                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestExecutionSet || !_powerRequestAwayModeSet || !_powerRequestDisplaySet)
                 {
                     EnablePowerRequests();
                 }
-                else if (_isWorkstationLocked && _powerRequestDisplaySet)
-                {
-                    NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-                    _powerRequestDisplaySet = false;
-                    App.Log("[Power] Cleared PowerRequestDisplayRequired on reapply (workstation locked)");
-                }
 
-                // 2. Reaffirm thread execution state (system + away mode)
+                // 2. Reaffirm thread execution state (system + away mode + display)
                 var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                               NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
+                              NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED |
                               NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
-                if (!_isWorkstationLocked)
-                {
-                    esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
-                }
 
                 var result = NativeMethods.SetThreadExecutionState(esFlags);
                 App.Log($"[Power] ReapplyAwakeState (locked={_isWorkstationLocked}): SetThreadExecutionState returned {result}");
@@ -1387,11 +1392,8 @@ namespace Lumina.ViewModels
                     // 2. Thread Execution State (legacy / defense-in-depth)
                     var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                                   NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
+                                  NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED |
                                   NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
-                    if (!_isWorkstationLocked)
-                    {
-                        esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
-                    }
 
                     var result = NativeMethods.SetThreadExecutionState(esFlags);
                     App.Log($"[Power] SetThreadExecutionState returned: {result}");
@@ -1629,17 +1631,11 @@ namespace Lumina.ViewModels
 
         public void ExecuteLockAndTurnOff()
         {
-            App.Log("[MainViewModel] Executing LockWorkStation and powering off monitors");
+            App.Log($"[MainViewModel] Executing LockWorkStation and powering off monitors (PreventSleep={PreventSleep})");
 
-            // 1. Immediately flag locked state and reapply awake state so Away Mode is active
-            // and PowerRequestDisplayRequired is cleared before the lock engages
             _isWorkstationLocked = true;
-            if (_settings.PreventSleep)
-            {
-                ReapplyAwakeState();
-            }
 
-            // 2. Put external DDC/CI monitors into power standby mode (0x04)
+            // 1. Put external DDC/CI monitors into power standby mode (0x04)
             try
             {
                 _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
@@ -1649,51 +1645,82 @@ namespace Lumina.ViewModels
                 App.Log($"[MainViewModel] SetAllExternalMonitorsPowerMode(0x04) error: {ex.Message}");
             }
 
-            // 3. Lock the workstation
-            try
+            if (PreventSleep)
             {
-                NativeMethods.LockWorkStation();
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
-            }
-
-            // 4. After lock screen has engaged, command Windows to power down remaining displays
-            System.Threading.Tasks.Task.Delay(800).ContinueWith(_ =>
-            {
+                // When Prevent Sleep is active:
+                // DO NOT send SC_MONITORPOWER!
+                // On S0 Modern Standby Windows 11 laptops, sending SC_MONITORPOWER triggers
+                // an explicit 'SleepButton' transition into Modern Standby sleep (suspending Wi-Fi and CPU).
+                // Instead, we:
+                // - Save and dim internal brightness to 0%
+                // - Keep display pipeline alive (ES_DISPLAY_REQUIRED) so the SoC never enters S0ix sleep
+                // - Lock the workstation
                 try
                 {
-                    IntPtr targetHwnd = (IntPtr)NativeMethods.HWND_BROADCAST;
-                    try
+                    var currentInternal = _monitorService.GetInternalBrightness();
+                    if (currentInternal.HasValue && currentInternal.Value > 0)
                     {
+                        _savedInternalBrightness = currentInternal.Value;
+                        _monitorService.SetInternalBrightness(0);
+                        App.Log($"[Power] Dimmed internal display to 0% (saved: {_savedInternalBrightness}%)");
                         System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                         {
-                            var mainWin = System.Windows.Application.Current.MainWindow;
-                            if (mainWin != null)
+                            var internalMon = Monitors.FirstOrDefault(m => m.Type == Models.MonitorType.WmiInternal);
+                            if (internalMon != null)
                             {
-                                var helper = new System.Windows.Interop.WindowInteropHelper(mainWin);
-                                if (helper.Handle != IntPtr.Zero)
-                                {
-                                    targetHwnd = helper.Handle;
-                                }
+                                internalMon.CurrentBrightness = 0;
                             }
                         });
                     }
-                    catch { }
-
-                    NativeMethods.PostMessage(
-                        targetHwnd,
-                        NativeMethods.WM_SYSCOMMAND,
-                        (IntPtr)NativeMethods.SC_MONITORPOWER,
-                        (IntPtr)2);
-                    App.Log($"[MainViewModel] Sent SC_MONITORPOWER (2) to {targetHwnd}");
                 }
                 catch (Exception ex)
                 {
-                    App.Log($"[MainViewModel] Error posting SC_MONITORPOWER: {ex.Message}");
+                    App.Log($"[Power] Error dimming internal display: {ex.Message}");
                 }
-            });
+
+                // Reapply awake state to maintain keep-alive
+                ReapplyAwakeState();
+
+                // Lock the workstation
+                try
+                {
+                    NativeMethods.LockWorkStation();
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
+                }
+            }
+            else
+            {
+                // Prevent Sleep is NOT active: normal lock and full monitor power down
+                try
+                {
+                    NativeMethods.LockWorkStation();
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
+                }
+
+                System.Threading.Tasks.Task.Delay(800).ContinueWith(_ =>
+                {
+                    try
+                    {
+                        IntPtr targetHwnd = (IntPtr)NativeMethods.HWND_BROADCAST;
+                        NativeMethods.PostMessage(
+                            targetHwnd,
+                            NativeMethods.WM_SYSCOMMAND,
+                            (IntPtr)NativeMethods.SC_MONITORPOWER,
+                            (IntPtr)2);
+                        App.Log($"[MainViewModel] Sent SC_MONITORPOWER (2) to {targetHwnd}");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Log($"[MainViewModel] Error posting SC_MONITORPOWER: {ex.Message}");
+                    }
+                });
+            }
         }
 
         #endregion

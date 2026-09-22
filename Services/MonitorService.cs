@@ -503,6 +503,32 @@ namespace Lumina.Services
             }
         }
 
+        public void SetInternalBrightness(uint targetBrightness)
+        {
+            SetWmiBrightness(targetBrightness);
+        }
+
+        public uint? GetInternalBrightness()
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT * FROM WmiMonitorBrightness");
+                using var collection = searcher.Get();
+                foreach (ManagementObject obj in collection)
+                {
+                    if (obj["CurrentBrightness"] != null)
+                    {
+                        return Convert.ToUInt32(obj["CurrentBrightness"]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Get WMI Brightness error: {ex.Message}");
+            }
+            return null;
+        }
+
         private static void SetWmiBrightness(uint targetBrightness, string? targetInstance = null)
         {
             try

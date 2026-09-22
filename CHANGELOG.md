@@ -4,6 +4,19 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.10] - 2026-09-22
+
+### Fixed
+- **Eliminate Modern Standby Sleep Trigger in "Lock & Screen Off"**:
+  - Identified root cause of instant sleep: On Windows 10/11 laptops with S0 Modern Standby, Windows intercepts any `SC_MONITORPOWER (2)` system command as a manual `SleepButton` press, forcing the Intel/AMD SoC into S0ix Modern Standby sleep (suspending Wi-Fi to D3 and pausing CPU/apps).
+  - When **Prevent Sleep** is active, Luminark now **never sends `SC_MONITORPOWER`**.
+  - **Hardware Display Standby**: External monitors are powered off directly via VESA DDC/CI hardware standby (`VCP 0xD6 = 4`), bypassing Windows OS power messages entirely.
+  - **Internal Display Dimming**: Internal laptop displays are dimmed to 0% brightness via WMI when locking, and restored to the previous brightness level upon unlocking.
+  - **Persistent Display Pipeline**: Retains `ES_DISPLAY_REQUIRED` and `PowerRequestDisplayRequired` in the kernel so Windows never signals the hardware SoC to enter S0ix sleep.
+  - The laptop remains 100% active, network stays connected, and downloads/tasks continue without interruption while screens are dark and workstation is locked.
+
+---
+
 ## [1.1.9] - 2026-09-22
 
 ### Fixed
