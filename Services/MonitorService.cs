@@ -479,7 +479,7 @@ namespace Lumina.Services
 
         public void SetMonitorPowerMode(MonitorInfo monitor, uint powerMode)
         {
-            if (monitor.IsInternal || monitor.PhysicalHandle == IntPtr.Zero) return;
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero) return;
             try
             {
                 // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off
@@ -492,11 +492,11 @@ namespace Lumina.Services
             }
         }
 
-        public void SetAllExternalMonitorsPowerMode(uint powerMode)
+        public void SetAllExternalMonitorsPowerMode(IEnumerable<MonitorInfo> monitors, uint powerMode)
         {
-            foreach (var m in _monitors)
+            foreach (var m in monitors)
             {
-                if (!m.IsInternal && m.PhysicalHandle != IntPtr.Zero)
+                if (m.Type == MonitorType.DdcCi && m.PhysicalHandle != IntPtr.Zero)
                 {
                     SetMonitorPowerMode(m, powerMode);
                 }

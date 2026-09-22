@@ -111,7 +111,7 @@ namespace Lumina.ViewModels
                 {
                     try
                     {
-                        _monitorService.SetAllExternalMonitorsPowerMode(0x01);
+                        _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x01);
                     }
                     catch { }
                 });
@@ -1642,7 +1642,7 @@ namespace Lumina.ViewModels
             // 2. Put external DDC/CI monitors into power standby mode (0x04)
             try
             {
-                _monitorService.SetAllExternalMonitorsPowerMode(0x04);
+                _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
             }
             catch (Exception ex)
             {
