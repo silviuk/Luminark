@@ -105,6 +105,34 @@ namespace Lumina.Services
             }
         }
 
+        private void CleanStartupFolderShortcut()
+        {
+            try
+            {
+                string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+                if (!string.IsNullOrEmpty(startupFolder) && Directory.Exists(startupFolder))
+                {
+                    string lnkPath = Path.Combine(startupFolder, "Luminark.lnk");
+                    if (File.Exists(lnkPath))
+                    {
+                        File.Delete(lnkPath);
+                        App.Log("[Settings] Removed redundant Startup folder shortcut: " + lnkPath);
+                    }
+
+                    string legacyLnk = Path.Combine(startupFolder, "Lumina.lnk");
+                    if (File.Exists(legacyLnk))
+                    {
+                        File.Delete(legacyLnk);
+                        App.Log("[Settings] Removed redundant legacy Startup folder shortcut: " + legacyLnk);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Settings] CleanStartupFolderShortcut warning: {ex.Message}");
+            }
+        }
+
         private void CleanLegacyStartup()
         {
             try
@@ -117,6 +145,8 @@ namespace Lumina.Services
                 }
             }
             catch { }
+
+            CleanStartupFolderShortcut();
         }
 
         private void SetStartup(bool enable)

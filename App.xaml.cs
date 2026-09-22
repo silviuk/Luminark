@@ -61,9 +61,47 @@ namespace Lumina
                 Log($"[CRITICAL DOMAIN ERROR] {args.ExceptionObject}");
             };
 
+            bool isMinimizedArg = false;
+            foreach (var arg in e.Args)
+            {
+                if (string.Equals(arg, "--minimized", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(arg, "-minimized", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(arg, "/minimized", StringComparison.OrdinalIgnoreCase))
+                {
+                    isMinimizedArg = true;
+                    break;
+                }
+            }
+
+            bool isStartupTask = false;
+            if (SettingsService.IsPackaged())
+            {
+                try
+                {
+                    var activatedArgs = global::Windows.ApplicationModel.AppInstance.GetActivatedEventArgs();
+                    if (activatedArgs != null && activatedArgs.Kind == global::Windows.ApplicationModel.Activation.ActivationKind.StartupTask)
+                    {
+                        isStartupTask = true;
+                        Log("[App] Launched via Windows StartupTask");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"[App] AppInstance activation check warning: {ex.Message}");
+                }
+            }
+
             const string ActivateEventName = "Luminark_SingleInstance_Activate_Event";
             if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var existingEvent))
             {
+                if (isMinimizedArg || isStartupTask)
+                {
+                    Log("Another instance of Luminark is already running. Launched with minimized/startup parameter -> exiting silently without activating existing window.");
+                    existingEvent.Dispose();
+                    Shutdown();
+                    return;
+                }
+
                 Log("Another instance of Luminark is already running. Signaling activation event.");
                 existingEvent.Set();
                 existingEvent.Dispose();
@@ -122,26 +160,8 @@ namespace Lumina
                 var mainWindow = new MainWindow(_viewModel);
                 MainWindow = mainWindow;
 
-                bool isStartupTask = false;
-                if (SettingsService.IsPackaged())
-                {
-                    try
-                    {
-                        var activatedArgs = global::Windows.ApplicationModel.AppInstance.GetActivatedEventArgs();
-                        if (activatedArgs != null && activatedArgs.Kind == global::Windows.ApplicationModel.Activation.ActivationKind.StartupTask)
-                        {
-                            isStartupTask = true;
-                            Log("[App] Launched via Windows StartupTask -> starting minimized");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[App] AppInstance activation check warning: {ex.Message}");
-                    }
-                }
-
-                bool startMinimized = settings.StartMinimized || isStartupTask || (e.Args.Length > 0 && e.Args[0] == "--minimized");
-                Log($"Showing MainWindow (startMinimized={startMinimized}, isStartupTask={isStartupTask})");
+                bool startMinimized = settings.StartMinimized || isStartupTask || isMinimizedArg;
+                Log($"Showing MainWindow (startMinimized={startMinimized}, isStartupTask={isStartupTask}, isMinimizedArg={isMinimizedArg})");
 
                 if (!startMinimized)
                 {
