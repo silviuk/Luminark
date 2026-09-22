@@ -304,10 +304,24 @@ jobs:
           Write-Host "Submitting release notes to Windows Store What's New (Length: $($releaseNotes.Length) chars):"
           Write-Host $releaseNotes
 
+          # Load full store description if provided in repository
+          $fullDescription = ""
+          if (Test-Path "STORE_DESCRIPTION.md") {
+            $fullDescription = (Get-Content "STORE_DESCRIPTION.md" -Raw).Trim()
+            Write-Host "Found full store description from STORE_DESCRIPTION.md (Length: $($fullDescription.Length) chars)."
+          } elseif (Test-Path "store_description.txt") {
+            $fullDescription = (Get-Content "store_description.txt" -Raw).Trim()
+            Write-Host "Found full store description from store_description.txt (Length: $($fullDescription.Length) chars)."
+          }
+
           if ($subObj.listings) {
             foreach ($lang in $subObj.listings.PSObject.Properties) {
               if ($lang.Value.baseListing) {
                 $lang.Value.baseListing.releaseNotes = $releaseNotes
+                if ($fullDescription) {
+                  $lang.Value.baseListing.description = $fullDescription
+                  Write-Host "Updated $($lang.Name).baseListing.description from repository file."
+                }
                 if ($lang.Value.baseListing.shortDescription -and $lang.Value.baseListing.shortDescription.Length -gt 500) {
                   Write-Host "Truncating $($lang.Name).baseListing.shortDescription from $($lang.Value.baseListing.shortDescription.Length) to <= 500 characters."
                   $lang.Value.baseListing.shortDescription = "Native Windows 11 display automation: dynamic Light/Dark theme switching, Night Light sync, and hardware multi-monitor brightness control via DDC/CI and WMI with quick flyout controls."
