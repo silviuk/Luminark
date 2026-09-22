@@ -477,6 +477,32 @@ namespace Lumina.Services
             }
         }
 
+        public void SetMonitorPowerMode(MonitorInfo monitor, uint powerMode)
+        {
+            if (monitor.IsInternal || monitor.PhysicalHandle == IntPtr.Zero) return;
+            try
+            {
+                // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off
+                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
+                App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6, 0x{powerMode:X2}) result: {ok}");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MonitorService] SetMonitorPowerMode error on {monitor.FriendlyName}: {ex.Message}");
+            }
+        }
+
+        public void SetAllExternalMonitorsPowerMode(uint powerMode)
+        {
+            foreach (var m in _monitors)
+            {
+                if (!m.IsInternal && m.PhysicalHandle != IntPtr.Zero)
+                {
+                    SetMonitorPowerMode(m, powerMode);
+                }
+            }
+        }
+
         private static void SetWmiBrightness(uint targetBrightness, string? targetInstance = null)
         {
             try

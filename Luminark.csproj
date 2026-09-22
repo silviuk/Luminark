@@ -11,9 +11,9 @@
     <ApplicationTitle>Luminark</ApplicationTitle>
     <AssemblyName>Luminark</AssemblyName>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <AssemblyVersion>1.1.8.0</AssemblyVersion>
-    <FileVersion>1.1.8.0</FileVersion>
-    <Version>1.1.8</Version>
+    <AssemblyVersion>1.1.9.0</AssemblyVersion>
+    <FileVersion>1.1.9.0</FileVersion>
+    <Version>1.1.9</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>

@@ -4,6 +4,18 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.9] - 2026-09-22
+
+### Fixed
+- **Keep Laptop Awake During "Lock & Screen Off" on S0 Modern Standby**:
+  - Resolved an issue on modern Windows laptops (S0 Low Power Idle / Connected Standby) where pressing "Lock & Screen Off" or turning off monitors resulted in Windows entering Modern Standby sleep despite "Never sleep when plugged in" and "Prevent sleep: Forever".
+  - **Windows Away Mode Integration**: Registered `PowerRequestAwayModeRequired` via Kernel Power Request APIs (`kernel32.dll`) and `ES_AWAYMODE_REQUIRED` via `SetThreadExecutionState`. Away Mode ensures the system, CPU, disk, network, and desktop applications run at 100% capacity while screens and audio are powered down.
+  - **Independent ThreadPool Heartbeat Timer**: Added a dedicated `System.Threading.Timer` running on the thread pool to reaffirm kernel power requests every 30 seconds, preventing Windows from suspending keep-alive state when the desktop switches to `LogonUI` (lock screen).
+  - **VESA DDC/CI Hardware Standby**: External monitors are explicitly signaled to enter standby (`VCP 0xD6 = 4`) and automatically awakened (`VCP 0xD6 = 1`) upon session unlock.
+  - **Targeted Monitor Power Commands**: Avoided shell-wide `HWND_BROADCAST` sleep triggers by directing display power-down commands to the application window.
+
+---
+
 ## [1.1.8] - 2026-09-22
 
 ### Fixed
