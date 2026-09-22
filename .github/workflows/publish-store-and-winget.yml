@@ -61,7 +61,10 @@ jobs:
 
           # Extract release notes for Store What's New section
           $releaseNotes = ""
-          if ($release.body) {
+          if (Test-Path "RELEASE_NOTES.md") {
+            $releaseNotes = (Get-Content "RELEASE_NOTES.md" -Raw).Trim()
+            Write-Host "Found release notes from RELEASE_NOTES.md."
+          } elseif ($release.body -and -not $release.body.StartsWith("**Full Changelog**")) {
             $releaseNotes = $release.body.Trim()
             Write-Host "Found release notes from GitHub Release body."
           }
