@@ -4,6 +4,20 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.8] - 2026-09-22
+
+### Fixed
+- **Prevent Unminimized Startup at Windows Boot**:
+  - Resolved an issue where secondary or delayed startup triggers caused the main window to unexpectedly restore and pop up on screen at Windows login.
+  - Guarded single-instance activation so secondary launches with `--minimized` (or packaged `StartupTask`) exit quietly and never activate the running tray instance.
+
+### Improved
+- **Autostart Consolidation & Cleanup**:
+  - Standardized autostart strictly to the Windows `Run` registry key.
+  - Added automated cleanup routines to detect and remove redundant or legacy shortcuts in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`.
+
+---
+
 ## [1.1.7] - 2026-09-20
 
 ### Added

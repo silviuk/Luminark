@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+
+PackageIdentifier: silviuk.Luminark
+PackageVersion: 1.1.8
+PackageLocale: en-US
+Publisher: Silviu Vlasceanu
+PublisherUrl: https://github.com/silviuk/Luminark
+PublisherSupportUrl: https://github.com/silviuk/Luminark/issues
+Author: Silviu Vlasceanu
+PackageName: Luminark
+PackageUrl: https://github.com/silviuk/Luminark
+License: MIT
+LicenseUrl: https://github.com/silviuk/Luminark/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Silviu Vlasceanu
+CopyrightUrl: https://github.com/silviuk/Luminark/blob/main/LICENSE
+ShortDescription: Dynamic Windows 11 Theme, Night Light & Multi-Monitor Hardware Brightness Controller
+Description: |-
+  Luminark is a native Windows 11 utility engineered to automatically harmonize your display environment.
+  It synchronizes Windows system and app themes with day/night schedules or Windows Night Light,
+  and provides seamless hardware-level multi-monitor brightness control via DDC/CI and WMI.
+Moniker: luminark
+Tags:
+- brightness
+- dark-mode
+- ddc-ci
+- display
+- fluent
+- monitor
+- night-light
+- schedule
+- theme
+- windows-11
+ReleaseNotes: |-
+  What's New in Luminark v1.1.8:
+  - Prevent Unminimized Startup at Windows Boot: Resolved an issue where secondary or delayed startup triggers caused the main window to unexpectedly restore and pop up on screen at login.
+  - Guarded Single-Instance Activation: Secondary launches with --minimized (or packaged StartupTask) now exit quietly and never activate the running background tray instance.
+  - Autostart Consolidation & Cleanup: Standardized autostart strictly to the Windows Run registry key and added automatic cleanup routines for duplicate shortcuts in the Startup folder.
+ReleaseNotesUrl: https://github.com/silviuk/Luminark/releases/tag/v1.1.8
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0
