@@ -107,6 +107,7 @@ namespace Lumina.ViewModels
             {
                 _isWorkstationLocked = false;
                 App.Log("[Power] Workstation unlocked: restoring displays and awake state");
+                RestoreLockDisplayTimeout();
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     try
@@ -115,29 +116,6 @@ namespace Lumina.ViewModels
                     }
                     catch { }
                 });
-
-                if (_savedInternalBrightness.HasValue)
-                {
-                    var restoreVal = _savedInternalBrightness.Value;
-                    _savedInternalBrightness = null;
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            _monitorService.SetInternalBrightness(restoreVal);
-                            App.Log($"[Power] Restored internal display brightness to {restoreVal}%");
-                            System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
-                            {
-                                var internalMon = Monitors.FirstOrDefault(m => m.Type == Models.MonitorType.WmiInternal);
-                                if (internalMon != null)
-                                {
-                                    internalMon.CurrentBrightness = restoreVal;
-                                }
-                            });
-                        }
-                        catch { }
-                    });
-                }
             }
 
             if (_settings.PreventSleep)
@@ -1203,8 +1181,25 @@ namespace Lumina.ViewModels
         private bool _powerRequestDisplaySet = false;
         private bool _powerRequestExecutionSet = false;
         private bool _powerRequestAwayModeSet = false;
-        private bool _isWorkstationLocked = false;
-        private uint? _savedInternalBrightness = null;
+        private uint? _savedLockTimeoutAc = null;
+        private uint? _savedLockTimeoutDc = null;
+        private readonly object _lockTimeoutLock = new();
+
+        private void RestoreLockDisplayTimeout()
+        {
+            lock (_lockTimeoutLock)
+            {
+                if (_savedLockTimeoutAc.HasValue && _savedLockTimeoutDc.HasValue)
+                {
+                    uint ac = _savedLockTimeoutAc.Value;
+                    uint dc = _savedLockTimeoutDc.Value;
+                    _savedLockTimeoutAc = null;
+                    _savedLockTimeoutDc = null;
+                    NativeMethods.RestoreConsoleLockDisplayTimeout(ac, dc);
+                    App.Log($"[Power] Restored VIDEOCONLOCK to AC={ac}s, DC={dc}s");
+                }
+            }
+        }
 
         public string PreventSleepRemainingText
         {
@@ -1287,11 +1282,27 @@ namespace Lumina.ViewModels
 
                     // 4. Always keep display required while PreventSleep is active.
                     // On S0 Modern Standby laptops, allowing the display pipeline to power down
-                    // forces the Intel/AMD SoC into Modern Standby sleep (suspending CPU and Wi-Fi).
-                    if (!_powerRequestDisplaySet)
+                    // 4. Request display only when workstation is NOT locked.
+                    // On S0 Modern Standby laptops, holding DisplayRequired while locked prevents
+                    // the screen from ever turning off. When locked, we omit DisplayRequired so
+                    // Windows lock screen timeout powers down displays while SystemRequired and
+                    // ExecutionRequired keep the machine awake.
+                    if (!_isWorkstationLocked)
                     {
-                        _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-                        App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
+                        if (!_powerRequestDisplaySet)
+                        {
+                            _powerRequestDisplaySet = NativeMethods.PowerSetRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                            App.Log($"[Power] PowerSetRequest(DisplayRequired): {_powerRequestDisplaySet}");
+                        }
+                    }
+                    else
+                    {
+                        if (_powerRequestDisplaySet)
+                        {
+                            NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                            _powerRequestDisplaySet = false;
+                            App.Log("[Power] Cleared PowerRequestDisplayRequired (workstation is locked)");
+                        }
                     }
                 }
             }
@@ -1351,16 +1362,26 @@ namespace Lumina.ViewModels
             if (_settings.PreventSleep)
             {
                 // 1. Ensure kernel power requests are active (modern Windows 10/11 & S0 Modern Standby)
-                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestExecutionSet || !_powerRequestAwayModeSet || !_powerRequestDisplaySet)
+                if (_powerRequestHandle == IntPtr.Zero || !_powerRequestSystemSet || !_powerRequestExecutionSet || !_powerRequestAwayModeSet || (!_isWorkstationLocked && !_powerRequestDisplaySet))
                 {
                     EnablePowerRequests();
                 }
+                else if (_isWorkstationLocked && _powerRequestDisplaySet)
+                {
+                    NativeMethods.PowerClearRequest(_powerRequestHandle, NativeMethods.POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
+                    _powerRequestDisplaySet = false;
+                    App.Log("[Power] Cleared PowerRequestDisplayRequired on reapply (workstation is locked)");
+                }
 
-                // 2. Reaffirm thread execution state (system + away mode + display)
+                // 2. Reaffirm thread execution state (system + away mode, and display only when unlocked)
                 var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                               NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
-                              NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED |
                               NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
+
+                if (!_isWorkstationLocked)
+                {
+                    esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
+                }
 
                 var result = NativeMethods.SetThreadExecutionState(esFlags);
                 App.Log($"[Power] ReapplyAwakeState (locked={_isWorkstationLocked}): SetThreadExecutionState returned {result}");
@@ -1392,8 +1413,11 @@ namespace Lumina.ViewModels
                     // 2. Thread Execution State (legacy / defense-in-depth)
                     var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                                   NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
-                                  NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED |
                                   NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
+                    if (!_isWorkstationLocked)
+                    {
+                        esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
+                    }
 
                     var result = NativeMethods.SetThreadExecutionState(esFlags);
                     App.Log($"[Power] SetThreadExecutionState returned: {result}");
@@ -1635,7 +1659,14 @@ namespace Lumina.ViewModels
 
             _isWorkstationLocked = true;
 
-            // 1. Put external DDC/CI monitors into power standby mode (0x04)
+            // 1. If PreventSleep is active, immediately reapply awake state to clear DisplayRequired
+            // while keeping SystemRequired, ExecutionRequired, and AwayModeRequired active.
+            if (PreventSleep)
+            {
+                ReapplyAwakeState();
+            }
+
+            // 2. Put external DDC/CI monitors into power standby mode (0x04) immediately
             try
             {
                 _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
@@ -1645,82 +1676,39 @@ namespace Lumina.ViewModels
                 App.Log($"[MainViewModel] SetAllExternalMonitorsPowerMode(0x04) error: {ex.Message}");
             }
 
-            if (PreventSleep)
+            // 3. Configure Windows Console Lock Display Off Timeout (VIDEOCONLOCK) to 1 second.
+            // On Windows 10/11 (especially S0 Modern Standby), sending SC_MONITORPOWER (2) triggers
+            // an explicit 'SleepButton' transition into system sleep, overriding idle keep-awake settings.
+            // By contrast, setting VIDEOCONLOCK to 1 second causes Windows to turn off all displays
+            // naturally via idle timeout, completely powering off backlights while preserving CPU,
+            // Wi-Fi connectivity, and background execution.
+            lock (_lockTimeoutLock)
             {
-                // When Prevent Sleep is active:
-                // DO NOT send SC_MONITORPOWER!
-                // On S0 Modern Standby Windows 11 laptops, sending SC_MONITORPOWER triggers
-                // an explicit 'SleepButton' transition into Modern Standby sleep (suspending Wi-Fi and CPU).
-                // Instead, we:
-                // - Save and dim internal brightness to 0%
-                // - Keep display pipeline alive (ES_DISPLAY_REQUIRED) so the SoC never enters S0ix sleep
-                // - Lock the workstation
-                try
+                if (NativeMethods.SetConsoleLockDisplayTimeout(1, out uint origAc, out uint origDc))
                 {
-                    var currentInternal = _monitorService.GetInternalBrightness();
-                    if (currentInternal.HasValue && currentInternal.Value > 0)
-                    {
-                        _savedInternalBrightness = currentInternal.Value;
-                        _monitorService.SetInternalBrightness(0);
-                        App.Log($"[Power] Dimmed internal display to 0% (saved: {_savedInternalBrightness}%)");
-                        System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
-                        {
-                            var internalMon = Monitors.FirstOrDefault(m => m.Type == Models.MonitorType.WmiInternal);
-                            if (internalMon != null)
-                            {
-                                internalMon.CurrentBrightness = 0;
-                            }
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Log($"[Power] Error dimming internal display: {ex.Message}");
-                }
-
-                // Reapply awake state to maintain keep-alive
-                ReapplyAwakeState();
-
-                // Lock the workstation
-                try
-                {
-                    NativeMethods.LockWorkStation();
-                }
-                catch (Exception ex)
-                {
-                    App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
+                    _savedLockTimeoutAc = origAc;
+                    _savedLockTimeoutDc = origDc;
+                    App.Log($"[Power] Set VIDEOCONLOCK to 1s (saved: AC={origAc}s, DC={origDc}s)");
                 }
             }
-            else
-            {
-                // Prevent Sleep is NOT active: normal lock and full monitor power down
-                try
-                {
-                    NativeMethods.LockWorkStation();
-                }
-                catch (Exception ex)
-                {
-                    App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
-                }
 
-                System.Threading.Tasks.Task.Delay(800).ContinueWith(_ =>
-                {
-                    try
-                    {
-                        IntPtr targetHwnd = (IntPtr)NativeMethods.HWND_BROADCAST;
-                        NativeMethods.PostMessage(
-                            targetHwnd,
-                            NativeMethods.WM_SYSCOMMAND,
-                            (IntPtr)NativeMethods.SC_MONITORPOWER,
-                            (IntPtr)2);
-                        App.Log($"[MainViewModel] Sent SC_MONITORPOWER (2) to {targetHwnd}");
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Log($"[MainViewModel] Error posting SC_MONITORPOWER: {ex.Message}");
-                    }
-                });
+            // 4. Lock workstation
+            try
+            {
+                NativeMethods.LockWorkStation();
             }
+            catch (Exception ex)
+            {
+                App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
+            }
+
+            // 5. Restore VIDEOCONLOCK back to original value after displays have powered down (5 seconds)
+            // so that when the user wakes the screen with mouse/keyboard, the lock screen displays
+            // at normal brightness and gives the user their full normal timeout to enter their password.
+            System.Threading.Tasks.Task.Delay(5000).ContinueWith(_ =>
+            {
+                RestoreLockDisplayTimeout();
+            });
         }
 
         #endregion
@@ -1741,6 +1729,7 @@ namespace Lumina.ViewModels
                 StopPreventSleepTimer();
                 DisablePowerRequests();
                 NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+                RestoreLockDisplayTimeout();
             }
             catch { }
         }

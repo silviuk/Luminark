@@ -4,6 +4,18 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.11] - 2026-09-22
+
+### Fixed
+- **Native Screen Off via Windows Console Lock Timeout (`VIDEOCONLOCK`)**:
+  - Replaced the temporary 0% WMI brightness dimming and eliminated `SC_MONITORPOWER` sleep triggers.
+  - Monitors (both internal laptop display and external monitors) are completely powered down by the OS (backlight 100% off) using Windows' native Console Lock Display Off Timeout (`8EC4B3A5-6868-48c2-BE75-4F3044BE88A7`) configured to 1 second via `powrprof.dll`.
+  - Because display power-down occurs via native idle display timeout rather than an explicit user `SleepButton` command, Windows honors "Never sleep when plugged in" power settings and Luminark's active `PowerRequestExecutionRequired` + `PowerRequestSystemRequired` requests. The PC stays fully awake (CPU running, Wi-Fi connected, background tasks running).
+  - Automatically restores `VIDEOCONLOCK` to its original value (e.g. 60s) after displays power down so that when the user wakes the computer to type their password, the lock screen displays immediately at full normal brightness and provides the full timeout to unlock.
+  - External monitors also receive direct VESA DDC/CI DPMS standby (`0x04`) on lock and wake (`0x01`) on unlock.
+
+---
+
 ## [1.1.10] - 2026-09-22
 
 ### Fixed

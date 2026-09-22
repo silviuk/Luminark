@@ -340,6 +340,127 @@ namespace Lumina.Services
 
         public const uint MOUSEEVENTF_MOVE = 0x0001;
 
+        #region Windows Power Policy Settings (powrprof.dll)
+
+        public static readonly Guid GUID_SUB_VIDEO = new Guid("7516b95f-f776-4464-8c53-06167f40cc99");
+        public static readonly Guid GUID_VIDEOCONLOCK = new Guid("8EC4B3A5-6868-48c2-BE75-4F3044BE88A7");
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerGetActiveScheme(
+            IntPtr UserRootPowerKey,
+            out IntPtr ActivePolicyGuid);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerSetActiveScheme(
+            IntPtr UserRootPowerKey,
+            ref Guid SchemeGuid);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerReadACValueIndex(
+            IntPtr RootPowerKey,
+            ref Guid SchemeGuid,
+            ref Guid SubGroupOfPowerSettingsGuid,
+            ref Guid PowerSettingGuid,
+            out uint AcValueIndex);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerReadDCValueIndex(
+            IntPtr RootPowerKey,
+            ref Guid SchemeGuid,
+            ref Guid SubGroupOfPowerSettingsGuid,
+            ref Guid PowerSettingGuid,
+            out uint DcValueIndex);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerWriteACValueIndex(
+            IntPtr RootPowerKey,
+            ref Guid SchemeGuid,
+            ref Guid SubGroupOfPowerSettingsGuid,
+            ref Guid PowerSettingGuid,
+            uint AcValueIndex);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerWriteDCValueIndex(
+            IntPtr RootPowerKey,
+            ref Guid SchemeGuid,
+            ref Guid SubGroupOfPowerSettingsGuid,
+            ref Guid PowerSettingGuid,
+            uint DcValueIndex);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr LocalFree(IntPtr hMem);
+
+        public static bool SetConsoleLockDisplayTimeout(uint seconds, out uint originalAc, out uint originalDc)
+        {
+            originalAc = 60;
+            originalDc = 60;
+            try
+            {
+                if (PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) != 0 || pGuid == IntPtr.Zero)
+                    return false;
+
+                Guid scheme;
+                try
+                {
+                    scheme = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid))!;
+                }
+                finally
+                {
+                    LocalFree(pGuid);
+                }
+
+                Guid subVideo = GUID_SUB_VIDEO;
+                Guid videoConLock = GUID_VIDEOCONLOCK;
+
+                PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalAc);
+                PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalDc);
+
+                PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, seconds);
+                PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, seconds);
+                PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Power] SetConsoleLockDisplayTimeout error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public static bool RestoreConsoleLockDisplayTimeout(uint originalAc, uint originalDc)
+        {
+            try
+            {
+                if (PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) != 0 || pGuid == IntPtr.Zero)
+                    return false;
+
+                Guid scheme;
+                try
+                {
+                    scheme = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid))!;
+                }
+                finally
+                {
+                    LocalFree(pGuid);
+                }
+
+                Guid subVideo = GUID_SUB_VIDEO;
+                Guid videoConLock = GUID_VIDEOCONLOCK;
+
+                PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalAc);
+                PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalDc);
+                PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Power] RestoreConsoleLockDisplayTimeout error: {ex.Message}");
+                return false;
+            }
+        }
+
+        #endregion
+
         #region Session and Lock Detection
 
         public const int WTS_CURRENT_SESSION = -1;
