@@ -1181,6 +1181,7 @@ namespace Lumina.ViewModels
         private bool _powerRequestDisplaySet = false;
         private bool _powerRequestExecutionSet = false;
         private bool _powerRequestAwayModeSet = false;
+        private bool _isWorkstationLocked = false;
         private uint? _savedLockTimeoutAc = null;
         private uint? _savedLockTimeoutDc = null;
         private readonly object _lockTimeoutLock = new();
