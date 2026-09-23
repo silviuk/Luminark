@@ -4,6 +4,18 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.12] - 2026-09-23
+
+### Fixed
+- **External Monitor Brightness Control in Single-Display Mode on Laptops**:
+  - Resolved an issue on laptops where external monitor brightness control worked in dual-screen extended mode, but had no effect when used as the sole display ("Second screen only" via `Win+P` or clamshell mode with laptop lid closed).
+  - **Low-Level VESA MCCS VCP 0x10 Fallback**: Added automatic fallback to `SetVCPFeature(0x10)` and `GetVCPFeatureAndVCPFeatureReply(0x10)`. When GPU drivers (such as Intel Iris Xe, NVIDIA Optimus, or AMD) fail or reject high-level `SetMonitorBrightness` calls in single-display mode, Luminark sends the raw Luminance opcode directly across the I2C bus.
+  - **Persistent PnP Hardware ID Generation**: Replaced GDI's dynamic adapter index (`DISPLAY1` vs `DISPLAY2`) with permanent monitor PnP Hardware IDs (`EnumDisplayDevices`). This prevents Windows from renumbering external displays upon topology changes and eliminates zombie duplicate inactive monitor cards with dead handles.
+  - **Automatic Physical Handle Re-acquisition**: If a display topology change or driver reset invalidates a monitor's physical handle, Luminark automatically re-queries the physical monitor handle for that display and retries the command.
+  - **Inactive Monitor Command Filtering**: Master brightness and batch adjustments now strictly skip inactive/disconnected monitors (`!mon.IsActive`), eliminating I2C bus contention from invalid handles.
+
+---
+
 ## [1.1.11] - 2026-09-22
 
 ### Fixed

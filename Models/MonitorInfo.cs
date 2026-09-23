@@ -95,6 +95,8 @@ namespace Lumina.Models
         public string FriendlyName { get; set; } = string.Empty;
         public MonitorType Type { get; set; } = MonitorType.DdcCi;
         public IntPtr PhysicalHandle { get; set; } = IntPtr.Zero;
+        public IntPtr HMonitor { get; set; } = IntPtr.Zero;
+        public string PnpDeviceId { get; set; } = string.Empty;
         public uint MinBrightness { get; set; } = 0;
         public uint MaxBrightness { get; set; } = 100;
         public string InstanceName { get; set; } = string.Empty;

@@ -40,6 +40,27 @@ namespace Lumina.Services
         private readonly object _lock = new();
         private readonly Dictionary<string, CancellationTokenSource> _debounceTokens = new();
 
+        public static string FormatStableId(string pnpId, string desc, int monitorIndex)
+        {
+            if (!string.IsNullOrWhiteSpace(pnpId))
+            {
+                var parts = pnpId.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    string hwModel = parts[1];
+                    string subId = parts.Length >= 3 ? parts[parts.Length - 1] : "";
+                    string cleanKey = $"{hwModel}_{subId}".Replace("{", "").Replace("}", "").Replace("-", "_").Trim('_');
+                    if (!string.IsNullOrWhiteSpace(cleanKey))
+                    {
+                        return $"DDC_{cleanKey}";
+                    }
+                }
+            }
+
+            string cleanDesc = desc.Replace(" ", "_").Trim();
+            return $"DDC_{cleanDesc}_{monitorIndex}";
+        }
+
         public List<MonitorInfo> EnumerateMonitors()
         {
             lock (_lock)
@@ -89,10 +110,40 @@ namespace Lumina.Services
                                             ? $"Display {monitorIndex}"
                                             : pm.szPhysicalMonitorDescription;
 
-                                        string cleanDev = devName.Replace(@"\\.\", "").Trim();
-                                        string stableId = !string.IsNullOrEmpty(cleanDev)
-                                            ? $"DDC_{cleanDev}_{desc}"
-                                            : $"DDC_{desc}_{monitorIndex}";
+                                        // Fallback to low-level VESA MCCS VCP opcode 0x10 if high-level API failed
+                                        if (!hasBrightness)
+                                        {
+                                            try
+                                            {
+                                                uint pvct = 0, vcpCur = 0, vcpMax = 0;
+                                                if (NativeMethods.GetVCPFeatureAndVCPFeatureReply(pm.hPhysicalMonitor, 0x10, out pvct, out vcpCur, out vcpMax))
+                                                {
+                                                    hasBrightness = true;
+                                                    min = 0;
+                                                    cur = Math.Clamp(vcpCur, 0, 100);
+                                                    max = vcpMax > 0 ? vcpMax : 100;
+                                                    App.Log($"[MonitorService] Low-level VCP 0x10 brightness detected for {desc} (cur={cur}, max={max})");
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                App.Log($"[MonitorService] VCP 0x10 check error for {desc}: {ex.Message}");
+                                            }
+                                        }
+
+                                        string pnpId = "";
+                                        try
+                                        {
+                                            var dd = new NativeMethods.DISPLAY_DEVICE();
+                                            dd.cb = Marshal.SizeOf(dd);
+                                            if (!string.IsNullOrEmpty(devName) && NativeMethods.EnumDisplayDevices(devName, (uint)i, ref dd, 0))
+                                            {
+                                                pnpId = dd.DeviceID ?? "";
+                                            }
+                                        }
+                                        catch { }
+
+                                        string stableId = FormatStableId(pnpId, desc, monitorIndex);
 
                                         if (hasBrightness)
                                         {
@@ -130,6 +181,8 @@ namespace Lumina.Services
                                                 FriendlyName = desc,
                                                 Type = MonitorType.DdcCi,
                                                 PhysicalHandle = pm.hPhysicalMonitor,
+                                                HMonitor = hMonitor,
+                                                PnpDeviceId = pnpId,
                                                 MinBrightness = min,
                                                 MaxBrightness = max,
                                                 CurrentBrightness = cur,
@@ -290,6 +343,8 @@ namespace Lumina.Services
 
         public void SetBrightness(MonitorInfo monitor, uint brightness)
         {
+            if (monitor == null || !monitor.IsActive) return;
+
             brightness = Math.Clamp(brightness, monitor.MinBrightness, monitor.MaxBrightness);
             monitor.CurrentBrightness = brightness;
 
@@ -311,9 +366,9 @@ namespace Lumina.Services
                         await Task.Delay(40, cts.Token);
                         if (cts.Token.IsCancellationRequested) return;
 
-                        if (monitor.Type == MonitorType.DdcCi && monitor.PhysicalHandle != IntPtr.Zero)
+                        if (monitor.Type == MonitorType.DdcCi)
                         {
-                            NativeMethods.SetMonitorBrightness(monitor.PhysicalHandle, brightness);
+                            ApplyDdcBrightness(monitor, brightness);
                         }
                         else if (monitor.Type == MonitorType.WmiInternal)
                         {
@@ -329,10 +384,149 @@ namespace Lumina.Services
             }
         }
 
+        private void ApplyDdcBrightness(MonitorInfo monitor, uint brightness)
+        {
+            if (!monitor.IsActive) return;
+
+            bool success = false;
+            IntPtr handle = monitor.PhysicalHandle;
+
+            if (handle != IntPtr.Zero)
+            {
+                try
+                {
+                    // 1. Try High-Level SetMonitorBrightness
+                    success = NativeMethods.SetMonitorBrightness(handle, brightness);
+                    if (!success)
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        // 2. Immediately try Low-Level VESA MCCS VCP 0x10 (Luminance)
+                        success = NativeMethods.SetVCPFeature(handle, 0x10, brightness);
+                        if (!success)
+                        {
+                            int vcpErr = Marshal.GetLastWin32Error();
+                            App.Log($"[MonitorService] SetMonitorBrightness failed (0x{err:X8}), SetVCPFeature(0x10) failed (0x{vcpErr:X8}) on {monitor.FriendlyName} (handle={handle})");
+                        }
+                        else
+                        {
+                            App.Log($"[MonitorService] Low-level SetVCPFeature(0x10, {brightness}%) succeeded on {monitor.FriendlyName}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MonitorService] DDC/CI brightness exception on {monitor.FriendlyName}: {ex.Message}");
+                }
+            }
+
+            // 3. Handle re-acquisition if calls failed or handle was zero
+            if (!success)
+            {
+                App.Log($"[MonitorService] DDC/CI commands failed. Attempting handle re-acquisition for {monitor.FriendlyName} ({monitor.Id})...");
+                if (TryReacquirePhysicalHandle(monitor))
+                {
+                    handle = monitor.PhysicalHandle;
+                    if (handle != IntPtr.Zero)
+                    {
+                        // Retry with both low-level and high-level
+                        success = NativeMethods.SetVCPFeature(handle, 0x10, brightness) ||
+                                  NativeMethods.SetMonitorBrightness(handle, brightness);
+                        App.Log($"[MonitorService] Re-acquired handle={handle}, retry brightness result={success}");
+                    }
+                }
+            }
+        }
+
+        public bool TryReacquirePhysicalHandle(MonitorInfo monitor)
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    IntPtr foundPhysHandle = IntPtr.Zero;
+
+                    NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hMon, IntPtr hdc, ref NativeMethods.Rect r, IntPtr d) =>
+                    {
+                        try
+                        {
+                            var mi = new NativeMethods.MONITORINFOEX();
+                            mi.cbSize = Marshal.SizeOf(mi);
+                            string devName = "";
+                            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
+                            {
+                                devName = mi.szDevice ?? "";
+                            }
+
+                            if (NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(hMon, out uint count) && count > 0)
+                            {
+                                var physMonitors = new NativeMethods.PHYSICAL_MONITOR[count];
+                                if (NativeMethods.GetPhysicalMonitorsFromHMONITOR(hMon, count, physMonitors))
+                                {
+                                    _monitorGroups.Add(new PhysicalMonitorGroup(physMonitors));
+
+                                    for (int i = 0; i < count; i++)
+                                    {
+                                        var pm = physMonitors[i];
+                                        string desc = string.IsNullOrWhiteSpace(pm.szPhysicalMonitorDescription)
+                                            ? ""
+                                            : pm.szPhysicalMonitorDescription;
+
+                                        bool matches = false;
+                                        if (!string.IsNullOrEmpty(monitor.PnpDeviceId))
+                                        {
+                                            var dd = new NativeMethods.DISPLAY_DEVICE();
+                                            dd.cb = Marshal.SizeOf(dd);
+                                            if (NativeMethods.EnumDisplayDevices(devName, (uint)i, ref dd, 0))
+                                            {
+                                                if (string.Equals(dd.DeviceID, monitor.PnpDeviceId, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    matches = true;
+                                                }
+                                            }
+                                        }
+
+                                        if (!matches && monitor.HMonitor != IntPtr.Zero && monitor.HMonitor == hMon)
+                                        {
+                                            matches = true;
+                                        }
+
+                                        if (!matches && !string.IsNullOrEmpty(desc) &&
+                                            (string.Equals(desc, monitor.FriendlyName, StringComparison.OrdinalIgnoreCase) ||
+                                             string.Equals(desc, monitor.DeviceName, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            matches = true;
+                                        }
+
+                                        if (matches)
+                                        {
+                                            foundPhysHandle = pm.hPhysicalMonitor;
+                                            monitor.PhysicalHandle = pm.hPhysicalMonitor;
+                                            monitor.HMonitor = hMon;
+                                            return false; // stop enumeration
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                        return true;
+                    }, IntPtr.Zero);
+
+                    return foundPhysHandle != IntPtr.Zero;
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MonitorService] TryReacquirePhysicalHandle error: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
         public void SetAllBrightness(IEnumerable<MonitorInfo> monitors, uint brightness)
         {
             foreach (var mon in monitors)
             {
+                if (!mon.IsActive) continue;
                 SetBrightness(mon, brightness);
             }
         }
@@ -408,7 +602,7 @@ namespace Lumina.Services
 
         public bool SetInputSource(MonitorInfo monitor, uint inputCode)
         {
-            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero)
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.IsActive)
                 return false;
 
             try
@@ -427,7 +621,7 @@ namespace Lumina.Services
 
         public void SetVolume(MonitorInfo monitor, uint volume, bool isMuted = false)
         {
-            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.SupportsAudioVolume)
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.SupportsAudioVolume || !monitor.IsActive)
                 return;
 
             volume = Math.Clamp(volume, monitor.MinVolume, monitor.MaxVolume);
@@ -449,7 +643,7 @@ namespace Lumina.Services
                     try
                     {
                         await Task.Delay(40, cts.Token);
-                        if (cts.Token.IsCancellationRequested) return;
+                        if (cts.Token.IsCancellationRequested || !monitor.IsActive) return;
 
                         if (isMuted)
                         {
@@ -479,7 +673,7 @@ namespace Lumina.Services
 
         public void SetMonitorPowerMode(MonitorInfo monitor, uint powerMode)
         {
-            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero) return;
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.IsActive) return;
             try
             {
                 // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off
@@ -496,7 +690,7 @@ namespace Lumina.Services
         {
             foreach (var m in monitors)
             {
-                if (m.Type == MonitorType.DdcCi && m.PhysicalHandle != IntPtr.Zero)
+                if (m.Type == MonitorType.DdcCi && m.PhysicalHandle != IntPtr.Zero && m.IsActive)
                 {
                     SetMonitorPowerMode(m, powerMode);
                 }

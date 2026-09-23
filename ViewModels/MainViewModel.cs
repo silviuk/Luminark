@@ -314,6 +314,7 @@ namespace Lumina.ViewModels
                         _isUpdatingMasterBrightness = true;
                         foreach (var mon in Monitors)
                         {
+                            if (!mon.IsActive) continue;
                             mon.CurrentBrightness = _masterBrightness;
                             _monitorService.SetBrightness(mon, _masterBrightness);
                         }
@@ -340,14 +341,82 @@ namespace Lumina.ViewModels
             }
         }
 
+        private MonitorInfo? FindExistingMonitor(IEnumerable<MonitorInfo> list, MonitorInfo fresh)
+        {
+            // 1. Exact ID match
+            var match = list.FirstOrDefault(m => m.Id == fresh.Id);
+            if (match != null) return match;
+
+            // 2. Match by PnP Device ID
+            if (!string.IsNullOrEmpty(fresh.PnpDeviceId))
+            {
+                match = list.FirstOrDefault(m => !string.IsNullOrEmpty(m.PnpDeviceId) &&
+                    string.Equals(m.PnpDeviceId, fresh.PnpDeviceId, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+
+            // 3. For DDC/CI external monitors, match by FriendlyName or legacy ID format (e.g. DDC_DISPLAY2_xxx vs DDC_DISPLAY1_xxx)
+            if (fresh.Type == MonitorType.DdcCi)
+            {
+                match = list.FirstOrDefault(m => m.Type == MonitorType.DdcCi &&
+                    string.Equals(m.FriendlyName, fresh.FriendlyName, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+
+                match = list.FirstOrDefault(m => m.Type == MonitorType.DdcCi &&
+                    (m.Id.StartsWith("DDC_DISPLAY") || fresh.Id.StartsWith("DDC_DISPLAY")) &&
+                    m.Id.EndsWith($"_{fresh.DeviceName}"));
+                if (match != null) return match;
+            }
+
+            return null;
+        }
+
+        private void MigrateMonitorSettings(string oldId, string newId)
+        {
+            if (string.IsNullOrEmpty(oldId) || string.IsNullOrEmpty(newId) || oldId == newId) return;
+
+            bool changed = false;
+            if (_settings.CustomMonitorNames.TryGetValue(oldId, out var customName))
+            {
+                _settings.CustomMonitorNames[newId] = customName;
+                _settings.CustomMonitorNames.Remove(oldId);
+                changed = true;
+            }
+
+            if (_settings.CustomInputNames.TryGetValue(oldId, out var inputNames))
+            {
+                _settings.CustomInputNames[newId] = inputNames;
+                _settings.CustomInputNames.Remove(oldId);
+                changed = true;
+            }
+
+            if (_settings.VisibleInputCodes.TryGetValue(oldId, out var visCodes))
+            {
+                _settings.VisibleInputCodes[newId] = visCodes;
+                _settings.VisibleInputCodes.Remove(oldId);
+                changed = true;
+            }
+
+            if (_settings.KnownExternalMonitorIds.Remove(oldId))
+            {
+                _settings.KnownExternalMonitorIds.Add(newId);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                SaveSettings();
+            }
+        }
+
         public void RefreshMonitors(bool forceRecreate = false)
         {
             var detected = _monitorService.EnumerateMonitors();
-            var detectedIds = new HashSet<string>(detected.Select(d => d.Id));
 
             bool sameActiveSet = !forceRecreate &&
+                Monitors.Count > 0 &&
                 Monitors.Count(m => m.IsActive) == detected.Count &&
-                Monitors.Where(m => m.IsActive).Select(m => m.Id).SequenceEqual(detected.Select(d => d.Id));
+                detected.All(d => FindExistingMonitor(Monitors.Where(m => m.IsActive), d) != null);
 
             if (sameActiveSet)
             {
@@ -355,10 +424,18 @@ namespace Lumina.ViewModels
                 for (int i = 0; i < detected.Count; i++)
                 {
                     var fresh = detected[i];
-                    var existing = Monitors.FirstOrDefault(m => m.Id == fresh.Id);
+                    var existing = FindExistingMonitor(Monitors, fresh);
                     if (existing == null) continue;
 
+                    if (existing.Id != fresh.Id)
+                    {
+                        MigrateMonitorSettings(existing.Id, fresh.Id);
+                        existing.Id = fresh.Id;
+                    }
+
                     existing.IsActive = true;
+                    existing.HMonitor = fresh.HMonitor;
+                    existing.PnpDeviceId = fresh.PnpDeviceId;
                     existing.PhysicalHandle = fresh.PhysicalHandle;
                     existing.SupportsAudioVolume = fresh.SupportsAudioVolume;
                     existing.SupportsAudioMute = fresh.SupportsAudioMute;
@@ -391,10 +468,18 @@ namespace Lumina.ViewModels
             // 1. Add or update detected active monitors
             foreach (var fresh in detected)
             {
-                var existing = Monitors.FirstOrDefault(m => m.Id == fresh.Id);
+                var existing = FindExistingMonitor(Monitors, fresh);
                 var mon = existing ?? fresh;
 
+                if (existing != null && existing.Id != fresh.Id)
+                {
+                    MigrateMonitorSettings(existing.Id, fresh.Id);
+                    existing.Id = fresh.Id;
+                }
+
                 mon.IsActive = true;
+                mon.HMonitor = fresh.HMonitor;
+                mon.PnpDeviceId = fresh.PnpDeviceId;
                 mon.PhysicalHandle = fresh.PhysicalHandle;
                 mon.SupportsAudioVolume = fresh.SupportsAudioVolume;
                 mon.SupportsAudioMute = fresh.SupportsAudioMute;
@@ -425,7 +510,12 @@ namespace Lumina.ViewModels
             // 2. Retain previously known external monitors that switched to another PC/input
             foreach (var prev in Monitors)
             {
-                if (!detectedIds.Contains(prev.Id) && prev.Type == MonitorType.DdcCi)
+                bool alreadyAdded = updatedMonitors.Any(u =>
+                    u.Id == prev.Id ||
+                    (!string.IsNullOrEmpty(u.PnpDeviceId) && !string.IsNullOrEmpty(prev.PnpDeviceId) && string.Equals(u.PnpDeviceId, prev.PnpDeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                    (u.Type == MonitorType.DdcCi && string.Equals(u.FriendlyName, prev.FriendlyName, StringComparison.OrdinalIgnoreCase)));
+
+                if (!alreadyAdded && prev.Type == MonitorType.DdcCi)
                 {
                     prev.IsActive = false;
                     foreach (var opt in prev.AllInputOptions)
