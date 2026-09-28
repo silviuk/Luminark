@@ -21,12 +21,28 @@ namespace Lumina
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Luminark", "luminark.log");
 
+        private RegisteredWaitHandle? _activateWaitHandle;
+        private EventWaitHandle? _activateEvent;
+
         public static void Log(string message)
         {
             try
             {
                 string dir = Path.GetDirectoryName(LogPath)!;
                 Directory.CreateDirectory(dir);
+
+                // Rotate log if it exceeds 5 MB to prevent unbounded growth
+                if (File.Exists(LogPath))
+                {
+                    var fi = new FileInfo(LogPath);
+                    if (fi.Length > 5 * 1024 * 1024)
+                    {
+                        string oldLog = Path.Combine(dir, "luminark.log.old");
+                        try { File.Delete(oldLog); } catch { }
+                        try { File.Move(LogPath, oldLog); } catch { }
+                    }
+                }
+
                 File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
             }
             catch { }
@@ -109,8 +125,8 @@ namespace Lumina
                 return;
             }
 
-            var activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
-            ThreadPool.RegisterWaitForSingleObject(activateEvent, (state, timedOut) =>
+            _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            _activateWaitHandle = ThreadPool.RegisterWaitForSingleObject(_activateEvent, (state, timedOut) =>
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -178,18 +194,12 @@ namespace Lumina
                     new System.Windows.Interop.WindowInteropHelper(mainWindow).EnsureHandle();
                     mainWindow.WindowState = WindowState.Minimized;
                     mainWindow.Hide();
-                    Lumina.MainWindow.TrimMemory();
                 }
 
                 Log("Starting ScheduleService");
                 _scheduleService.Start();
 
                 Log("Application_Startup completed successfully.");
-
-                System.Threading.Tasks.Task.Delay(3500).ContinueWith(_ =>
-                {
-                    Lumina.MainWindow.TrimMemory();
-                });
             }
             catch (Exception ex)
             {
@@ -202,11 +212,15 @@ namespace Lumina
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             Log("Application_Exit triggered.");
+            try { _activateWaitHandle?.Unregister(null); } catch { }
+            try { _activateEvent?.Dispose(); } catch { }
             try { _viewModel?.Dispose(); } catch { }
             try { NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS); } catch { }
             try { _scheduleService?.Stop(); } catch { }
             try { _scheduleService?.Dispose(); } catch { }
             try { _monitorService?.Dispose(); } catch { }
+            try { _themeService?.Dispose(); } catch { }
+            try { _nightLightService?.Dispose(); } catch { }
         }
     }
 }

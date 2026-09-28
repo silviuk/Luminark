@@ -56,7 +56,7 @@ namespace Lumina.Services
                     // Fresh installation: initialize schedule from Windows location-based sunrise/sunset if available
                     try
                     {
-                        var nl = new NightLightService();
+                        using var nl = new NightLightService();
                         var info = nl.GetNightLightInfo();
                         if (info.Sunrise.HasValue) settings.DayTime = info.Sunrise.Value;
                         if (info.Sunset.HasValue) settings.NightTime = info.Sunset.Value;

@@ -80,10 +80,6 @@ namespace Lumina
             {
                 App.Log($"[MainWindow] Loaded -> IsVisible={IsVisible}, ActualWidth={ActualWidth}, ActualHeight={ActualHeight}");
                 Activate();
-                System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ =>
-                {
-                    try { Dispatcher.Invoke(TrimMemory); } catch { }
-                });
             };
 
             StateChanged += (s, e) =>
@@ -327,6 +323,12 @@ namespace Lumina
                     _notifyIcon.Visible = false;
                     _notifyIcon.Dispose();
                     _notifyIcon = null;
+                }
+                if (_currentTrayIcon != null)
+                {
+                    try { NativeMethods.DestroyIcon(_currentTrayIcon.Handle); } catch { }
+                    try { _currentTrayIcon.Dispose(); } catch { }
+                    _currentTrayIcon = null;
                 }
                 _viewModel?.Dispose();
             }
@@ -594,12 +596,7 @@ namespace Lumina
         {
             try
             {
-                GC.Collect(2, GCCollectionMode.Aggressive, true, true);
-                GC.WaitForPendingFinalizers();
-                GC.Collect(2, GCCollectionMode.Aggressive, true, true);
-                var proc = System.Diagnostics.Process.GetCurrentProcess();
-                NativeMethods.EmptyWorkingSet(proc.Handle);
-                App.Log($"[MainWindow] TrimMemory completed. Current WS: {proc.WorkingSet64 / 1024 / 1024} MB");
+                GC.Collect(1, GCCollectionMode.Default, false);
             }
             catch { }
         }

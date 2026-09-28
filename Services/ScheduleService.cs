@@ -31,7 +31,7 @@ namespace Lumina.Services
 
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(15)
+                Interval = TimeSpan.FromSeconds(30)
             };
             _timer.Tick += OnTimerTick;
 

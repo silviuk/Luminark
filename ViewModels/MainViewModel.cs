@@ -51,6 +51,20 @@ namespace Lumina.ViewModels
                 Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
                 _isWorkstationLocked = NativeMethods.IsWorkstationLocked();
                 App.Log($"[MainViewModel] Initial lock state: locked={_isWorkstationLocked}");
+
+                // Safeguard: Check if VIDEOCONLOCK was left at 1s due to an unexpected termination
+                if (NativeMethods.PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) == 0 && pGuid != IntPtr.Zero)
+                {
+                    Guid scheme = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid))!;
+                    NativeMethods.LocalFree(pGuid);
+                    Guid subVideo = NativeMethods.GUID_SUB_VIDEO;
+                    Guid videoConLock = NativeMethods.GUID_VIDEOCONLOCK;
+                    if (NativeMethods.PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out uint acVal) == 0 && acVal <= 1)
+                    {
+                        NativeMethods.RestoreConsoleLockDisplayTimeout(60, 60);
+                        App.Log("[Power] Startup recovered VIDEOCONLOCK from 1s -> restored to 60s");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1559,31 +1573,22 @@ namespace Lumina.ViewModels
                 }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
             }
 
-            if (_preventSleepTimer == null)
+            if (_preventSleepExpiry != null)
             {
-                _preventSleepTimer = new System.Windows.Threading.DispatcherTimer
+                if (_preventSleepTimer == null)
                 {
-                    Interval = TimeSpan.FromSeconds(1)
-                };
-                _preventSleepTimer.Tick += (s, e) =>
-                {
-                    if (!PreventSleep)
+                    _preventSleepTimer = new System.Windows.Threading.DispatcherTimer
                     {
-                        StopPreventSleepTimer();
-                        return;
-                    }
+                        Interval = TimeSpan.FromSeconds(1)
+                    };
+                    _preventSleepTimer.Tick += (s, e) =>
+                    {
+                        if (!PreventSleep || _preventSleepExpiry == null)
+                        {
+                            _preventSleepTimer?.Stop();
+                            return;
+                        }
 
-                    // Heartbeat: reaffirm execution state every 30 seconds to reset system idle timer
-                    // and keep Windows awake even across power transitions
-                    _heartbeatCounter++;
-                    if (_heartbeatCounter >= 30)
-                    {
-                        _heartbeatCounter = 0;
-                        ReapplyAwakeState();
-                    }
-
-                    if (_preventSleepExpiry != null)
-                    {
                         if (DateTime.UtcNow >= _preventSleepExpiry.Value)
                         {
                             App.Log($"[Power] Prevent sleep duration ({_settings.PreventSleepDurationMinutes}m) elapsed. Restoring normal sleep.");
@@ -1593,10 +1598,14 @@ namespace Lumina.ViewModels
                         {
                             OnPropertyChanged(nameof(PreventSleepRemainingText));
                         }
-                    }
-                };
+                    };
+                }
+                _preventSleepTimer.Start();
             }
-            _preventSleepTimer.Start();
+            else
+            {
+                _preventSleepTimer?.Stop();
+            }
         }
 
         private void StopPreventSleepTimer()

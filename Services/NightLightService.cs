@@ -49,6 +49,7 @@ namespace Lumina.Services
         private void WatcherLoop()
         {
             using var changeEvent = new System.Threading.AutoResetEvent(false);
+            var waitHandles = new System.Threading.WaitHandle[] { changeEvent, _cts.Token.WaitHandle };
             bool lastActive = IsNightLightActive();
             App.Log($"[NightLightService] Watcher started. Initial active state: {lastActive}");
 
@@ -56,21 +57,21 @@ namespace Lumina.Services
             {
                 try
                 {
-                    using var key = Registry.CurrentUser.OpenSubKey(CloudStoreRootPath);
-                    if (key != null)
+                    using (var key = Registry.CurrentUser.OpenSubKey(CloudStoreRootPath))
                     {
-                        NativeMethods.RegNotifyChangeKeyValue(
-                            key.Handle.DangerousGetHandle(),
-                            true, // Watch all CloudStore bluelight subtrees
-                            NativeMethods.REG_NOTIFY_CHANGE_NAME | NativeMethods.REG_NOTIFY_CHANGE_LAST_SET,
-                            changeEvent.SafeWaitHandle.DangerousGetHandle(),
-                            true);
+                        if (key != null)
+                        {
+                            NativeMethods.RegNotifyChangeKeyValue(
+                                key.Handle.DangerousGetHandle(),
+                                true, // Watch all CloudStore bluelight subtrees
+                                NativeMethods.REG_NOTIFY_CHANGE_NAME | NativeMethods.REG_NOTIFY_CHANGE_LAST_SET,
+                                changeEvent.SafeWaitHandle.DangerousGetHandle(),
+                                true);
+                        }
                     }
 
-                    // Wait on native registry event, cancellation token, or 1000ms safety timeout
-                    int waitIndex = System.Threading.WaitHandle.WaitAny(
-                        new System.Threading.WaitHandle[] { changeEvent, _cts.Token.WaitHandle },
-                        1000);
+                    // Wait on native registry event or cancellation token (event-driven, 0% CPU idle)
+                    int waitIndex = System.Threading.WaitHandle.WaitAny(waitHandles);
 
                     if (waitIndex == 1 || _cts.IsCancellationRequested)
                     {
@@ -97,7 +98,11 @@ namespace Lumina.Services
                 catch (Exception ex)
                 {
                     App.Log($"[NightLightService Watcher ERROR] {ex.Message}");
-                    System.Threading.Thread.Sleep(2000);
+                    try
+                    {
+                        if (_cts.Token.WaitHandle.WaitOne(2000)) break;
+                    }
+                    catch { break; }
                 }
             }
         }

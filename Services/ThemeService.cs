@@ -5,35 +5,47 @@ using Wpf.Ui.Appearance;
 
 namespace Lumina.Services
 {
-    public class ThemeService
+    public class ThemeService : IDisposable
     {
         private const string PersonalizeKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
         public event Action<bool>? ThemeChanged;
+        private readonly UserPreferenceChangedEventHandler _userPrefChangedHandler;
 
         public ThemeService()
         {
+            _userPrefChangedHandler = (s, e) =>
+            {
+                if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color || e.Category == UserPreferenceCategory.Window)
+                {
+                    bool isLight = IsLightTheme();
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            ApplicationThemeManager.Apply(
+                                isLight ? ApplicationTheme.Light : ApplicationTheme.Dark,
+                                Wpf.Ui.Controls.WindowBackdropType.None,
+                                updateAccent: true);
+                        }
+                        catch { }
+                        ThemeChanged?.Invoke(isLight);
+                    });
+                }
+            };
+
             try
             {
-                SystemEvents.UserPreferenceChanged += (s, e) =>
-                {
-                    if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color || e.Category == UserPreferenceCategory.Window)
-                    {
-                        bool isLight = IsLightTheme();
-                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
-                        {
-                            try
-                            {
-                                ApplicationThemeManager.Apply(
-                                    isLight ? ApplicationTheme.Light : ApplicationTheme.Dark,
-                                    Wpf.Ui.Controls.WindowBackdropType.None,
-                                    updateAccent: true);
-                            }
-                            catch { }
-                            ThemeChanged?.Invoke(isLight);
-                        });
-                    }
-                };
+                SystemEvents.UserPreferenceChanged += _userPrefChangedHandler;
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                SystemEvents.UserPreferenceChanged -= _userPrefChangedHandler;
             }
             catch { }
         }

@@ -4,6 +4,27 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.13] - 2026-09-28
+
+### Fixed & Optimized
+- **Memory Utilization & Leak Fixes**:
+  - Eliminated the artificial working set ballooning caused by `EmptyWorkingSet()` and forced Gen2 GC cycles, replacing it with natural and efficient runtime memory management.
+  - Resolved an unmanaged handle and background thread leak in `SettingsService.Load()` where a `NightLightService` instance was created without being disposed on fresh installations.
+  - Fixed WMI COM object leaks by ensuring all `ManagementObject` instances returned from `ManagementObjectSearcher` queries are disposed deterministically.
+  - Implemented `IDisposable` in `ThemeService` to clean up static `SystemEvents.UserPreferenceChanged` event registrations on application exit.
+  - Ensured native Win32 GDI icon handles (`HICON`) are cleanly destroyed via `DestroyIcon` upon explicit exit.
+  - Tracked and unregistered the thread pool single-instance wait handle on shutdown.
+- **Performance & Background Polling Optimization**:
+  - Refactored `TrayScrollHook`: Removed global mouse move structure marshaling across the entire OS. The hook now returns immediately for non-wheel messages, eliminating millions of P/Invoke marshal operations and zeroing background hook CPU usage.
+  - Refactored `NightLightService` registry watcher into a purely event-driven model. Removed the 1-second timeout loop and repetitive allocations, keeping the thread fully suspended at 0% CPU until a genuine Windows registry change occurs.
+  - Optimized Prevent Sleep timers: Eliminated redundant duplicate keep-awake heartbeat wakeups and paused the 1-second UI timer when sleep prevention is set to "Forever".
+  - Increased base schedule check interval from 15s to 30s to reduce unnecessary timer wakeups.
+- **Security & Stability Hardening**:
+  - Added startup safety recovery for Windows Console Lock Display Timeout (`VIDEOCONLOCK`): Automatically detects and restores timeout to 60s if the process was abruptly terminated while displays were powered down.
+  - Implemented automatic log file rotation in `App.Log()` with a 5 MB cap to prevent unbounded disk growth.
+
+---
+
 ## [1.1.12] - 2026-09-23
 
 ### Fixed

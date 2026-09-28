@@ -292,41 +292,44 @@ namespace Lumina.Services
 
                     foreach (ManagementObject obj in collection)
                     {
-                        try
+                        using (obj)
                         {
-                            string instanceName = obj["InstanceName"]?.ToString() ?? $"InternalDisplay_{wmiIdx}";
-                            uint currentBrightness = 50;
-
-                            if (obj["CurrentBrightness"] != null)
+                            try
                             {
-                                currentBrightness = Convert.ToUInt32(obj["CurrentBrightness"]);
-                            }
+                                string instanceName = obj["InstanceName"]?.ToString() ?? $"InternalDisplay_{wmiIdx}";
+                                uint currentBrightness = 50;
 
-                            string friendly = "Built-in Display";
-                            if (instanceName.Contains("DISPLAY\\", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var parts = instanceName.Split('\\');
-                                if (parts.Length > 1)
+                                if (obj["CurrentBrightness"] != null)
                                 {
-                                    friendly = $"Laptop Screen ({parts[1]})";
+                                    currentBrightness = Convert.ToUInt32(obj["CurrentBrightness"]);
                                 }
-                            }
 
-                            results.Add(new MonitorInfo
+                                string friendly = "Built-in Display";
+                                if (instanceName.Contains("DISPLAY\\", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var parts = instanceName.Split('\\');
+                                    if (parts.Length > 1)
+                                    {
+                                        friendly = $"Laptop Screen ({parts[1]})";
+                                    }
+                                }
+
+                                results.Add(new MonitorInfo
+                                {
+                                    Id = $"WMI_{instanceName}",
+                                    DeviceName = instanceName,
+                                    FriendlyName = friendly,
+                                    Type = MonitorType.WmiInternal,
+                                    InstanceName = instanceName,
+                                    MinBrightness = 0,
+                                    MaxBrightness = 100,
+                                    CurrentBrightness = currentBrightness
+                                });
+                            }
+                            catch (Exception ex)
                             {
-                                Id = $"WMI_{instanceName}",
-                                DeviceName = instanceName,
-                                FriendlyName = friendly,
-                                Type = MonitorType.WmiInternal,
-                                InstanceName = instanceName,
-                                MinBrightness = 0,
-                                MaxBrightness = 100,
-                                CurrentBrightness = currentBrightness
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Log($"WMI item read error: {ex.Message}");
+                                App.Log($"WMI item read error: {ex.Message}");
+                            }
                         }
                         wmiIdx++;
                     }
@@ -710,9 +713,12 @@ namespace Lumina.Services
                 using var collection = searcher.Get();
                 foreach (ManagementObject obj in collection)
                 {
-                    if (obj["CurrentBrightness"] != null)
+                    using (obj)
                     {
-                        return Convert.ToUInt32(obj["CurrentBrightness"]);
+                        if (obj["CurrentBrightness"] != null)
+                        {
+                            return Convert.ToUInt32(obj["CurrentBrightness"]);
+                        }
                     }
                 }
             }
@@ -732,13 +738,16 @@ namespace Lumina.Services
 
                 foreach (ManagementObject obj in collection)
                 {
-                    string? inst = obj["InstanceName"]?.ToString();
-                    if (targetInstance == null || inst == targetInstance)
+                    using (obj)
                     {
-                        using var inParams = obj.GetMethodParameters("WmiSetBrightness");
-                        inParams["Timeout"] = 1;
-                        inParams["Brightness"] = (byte)targetBrightness;
-                        obj.InvokeMethod("WmiSetBrightness", inParams, null);
+                        string? inst = obj["InstanceName"]?.ToString();
+                        if (targetInstance == null || inst == targetInstance)
+                        {
+                            using var inParams = obj.GetMethodParameters("WmiSetBrightness");
+                            inParams["Timeout"] = 1;
+                            inParams["Brightness"] = (byte)targetBrightness;
+                            obj.InvokeMethod("WmiSetBrightness", inParams, null);
+                        }
                     }
                 }
             }

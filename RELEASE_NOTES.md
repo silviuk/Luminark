@@ -1,16 +1,18 @@
-What's New in Luminark v1.1.12:
+What's New in Luminark v1.1.13:
 
-• External Monitor Brightness in Single-Display Mode:
-  - Fixed brightness control on laptops when using an external monitor as the sole active display ("Second screen only" or clamshell mode with laptop lid closed).
-  - Added low-level VESA MCCS VCP 0x10 fallback for GPU drivers (Intel Iris Xe, NVIDIA Optimus, AMD) that reject high-level brightness commands when driving a single display.
-  - Automatic physical handle re-acquisition recovers instantly from display topology changes or power events.
-  - Persistent PnP hardware IDs eliminate duplicate inactive monitor entries caused by dynamic GDI display renumbering.
+• Memory & Performance Optimization:
+  - Eliminated artificial working set ballooning and forced Gen2 GC cycles, establishing smooth and stable memory utilization.
+  - Resolved an unmanaged handle and background thread leak in SettingsService.
+  - Fixed WMI COM object leaks by deterministically disposing all ManagementObject query instances.
+  - Cleaned up static SystemEvents event subscriptions in ThemeService to prevent memory leaks on exit.
+  - Properly released native Win32 GDI icon handles on exit.
 
-• Screen Off & Keep-Awake on Lock:
-  - "Lock & Screen Off" action and global hotkey (Win+J) natively powers down displays without sleeping the PC.
-  - S0 Modern Standby laptops stay 100% awake with network and background tasks running.
-  - Screen wakes at full normal brightness upon touching keyboard or mouse.
+• Background Hook & Polling Efficiency:
+  - Refactored TrayScrollHook: Eliminated global mouse movement processing across Windows, saving millions of marshal operations and reducing background CPU usage to 0%.
+  - Refactored NightLightService into a purely event-driven model without polling timeouts, preventing unnecessary CPU and thread wakeups.
+  - Consolidated Keep-Awake timers, pausing high-frequency ticks when sleep prevention is set to Forever.
+  - Increased schedule evaluation interval to 30s for minimal idle impact.
 
-• External Monitor Video Input Switching:
-  - Switch monitor inputs (DisplayPort, HDMI, USB-C) directly from the flyout or Main Window via DDC/CI.
-  - Assign custom friendly names and filter visible ports with active signal indicators (✔).
+• Security & Reliability Enhancements:
+  - Added startup safety recovery for Windows Console Lock Display Timeout (VIDEOCONLOCK) to ensure lock screen timeout is never stuck at 1s after an abnormal termination.
+  - Added log file rotation capped at 5 MB in App.Log to prevent unbounded disk usage.
