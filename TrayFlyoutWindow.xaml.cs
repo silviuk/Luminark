@@ -26,13 +26,22 @@ namespace Lumina
                 {
                     Hide();
                     _viewModel.CancelLockCountdown();
-                    _viewModel.CancelAllInputSwitches();
                     MainWindow.TrimMemory();
                 }
             };
 
             PreviewKeyDown += (s, e) =>
             {
+                if (e.Key == System.Windows.Input.Key.Enter && _viewModel.HasActiveInputSwitch)
+                {
+                    var switching = System.Linq.Enumerable.FirstOrDefault(_viewModel.Monitors, m => m.IsSwitchingInput);
+                    if (switching != null)
+                    {
+                        switching.ExecuteInputSwitchNow();
+                        e.Handled = true;
+                        return;
+                    }
+                }
                 if (e.Key == System.Windows.Input.Key.Escape)
                 {
                     if (_viewModel.HasActiveInputSwitch)
@@ -49,7 +58,6 @@ namespace Lumina
                     }
                     Hide();
                     _viewModel.CancelLockCountdown();
-                    _viewModel.CancelAllInputSwitches();
                     MainWindow.TrimMemory();
                     e.Handled = true;
                 }
@@ -92,6 +100,8 @@ namespace Lumina
                     UpdatePosition(_lastAnchorPoint);
                 }
             });
+
+            _ = _viewModel.RefreshCurrentInputsAsync();
         }
 
         private void UpdateDwmTheme()
@@ -114,7 +124,6 @@ namespace Lumina
             {
                 Hide();
                 _viewModel.CancelLockCountdown();
-                _viewModel.CancelAllInputSwitches();
                 MainWindow.TrimMemory();
             }
             else
@@ -376,6 +385,14 @@ namespace Lumina
             else
             {
                 _viewModel.CancelAllInputSwitches();
+            }
+        }
+
+        private void OnExecuteInputSwitchNowClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Lumina.Models.MonitorInfo monitor)
+            {
+                monitor.ExecuteInputSwitchNow();
             }
         }
     }

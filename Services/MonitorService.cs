@@ -192,21 +192,11 @@ namespace Lumina.Services
                                                 MaxVolume = maxVol > 0 ? maxVol : 100,
                                                 CurrentVolume = hasAudio ? curVol : 50,
                                                 IsMuted = hasMute && curMute == 1,
-                                                SupportsInputSelect = true
+                                                SupportsInputSelect = false
                                             };
 
-                                            var standardInputs = GetStandardInputOptions();
-                                            bool currentInList = false;
-                                            foreach (var opt in standardInputs)
-                                            {
-                                                mon.AllInputOptions.Add(opt);
-                                                if (hasInput && opt.Code == curInput)
-                                                {
-                                                    currentInList = true;
-                                                }
-                                            }
-
                                             // Query DDC/CI capabilities string if available
+                                            var capsCodes = new List<uint>();
                                             try
                                             {
                                                 if (NativeMethods.GetCapabilitiesStringLength(pm.hPhysicalMonitor, out uint capsLen) && capsLen > 0)
@@ -216,18 +206,7 @@ namespace Lumina.Services
                                                     {
                                                         string caps = sb.ToString();
                                                         App.Log($"[MonitorService] Capabilities for {desc}: {caps}");
-                                                        var capsCodes = ParseCapabilitiesInputCodes(caps);
-                                                        foreach (var code in capsCodes)
-                                                        {
-                                                            if (!mon.AllInputOptions.Any(o => o.Code == code))
-                                                            {
-                                                                mon.AllInputOptions.Add(new MonitorInputOption
-                                                                {
-                                                                    Code = code,
-                                                                    DefaultName = GetPortNameForCode(code)
-                                                                });
-                                                            }
-                                                        }
+                                                        capsCodes = ParseCapabilitiesInputCodes(caps);
                                                     }
                                                 }
                                             }
@@ -236,33 +215,78 @@ namespace Lumina.Services
                                                 App.Log($"[MonitorService] Query capabilities error for {desc}: {ex.Message}");
                                             }
 
-                                            if (hasInput && curInput > 0 && !currentInList && !mon.AllInputOptions.Any(o => o.Code == curInput))
+                                            bool supportsInput = hasInput || capsCodes.Count > 0;
+                                            mon.SupportsInputSelect = supportsInput;
+
+                                            if (supportsInput)
                                             {
-                                                var customOpt = new MonitorInputOption
+                                                if (capsCodes.Count > 0)
                                                 {
-                                                    Code = curInput,
-                                                    DefaultName = GetPortNameForCode(curInput)
-                                                };
-                                                mon.AllInputOptions.Add(customOpt);
-                                            }
+                                                    // Monitor explicitly reported its physical input list via MCCS capabilities
+                                                    foreach (var code in capsCodes)
+                                                    {
+                                                        mon.AllInputOptions.Add(new MonitorInputOption
+                                                        {
+                                                            Code = code,
+                                                            DefaultName = GetPortNameForCode(code),
+                                                            IsVisibleInFlyout = true
+                                                        });
+                                                    }
 
-                                            if (hasInput && curInput > 0)
-                                            {
-                                                mon.ActiveInputCode = curInput;
-                                                mon.SelectedInputCode = curInput;
-                                            }
-                                            else if (mon.AllInputOptions.Count > 0)
-                                            {
-                                                mon.ActiveInputCode = mon.AllInputOptions[0].Code;
-                                                mon.SelectedInputCode = mon.AllInputOptions[0].Code;
-                                            }
+                                                    if (hasInput && curInput > 0 && !capsCodes.Contains(curInput))
+                                                    {
+                                                        mon.AllInputOptions.Add(new MonitorInputOption
+                                                        {
+                                                            Code = curInput,
+                                                            DefaultName = GetPortNameForCode(curInput),
+                                                            IsVisibleInFlyout = true
+                                                        });
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    // Capabilities did not enumerate 0x60 codes, but VCP 0x60 replied to query
+                                                    if (hasInput && curInput > 0)
+                                                    {
+                                                        mon.AllInputOptions.Add(new MonitorInputOption
+                                                        {
+                                                            Code = curInput,
+                                                            DefaultName = GetPortNameForCode(curInput),
+                                                            IsVisibleInFlyout = true
+                                                        });
+                                                    }
 
-                                            foreach (var opt in mon.AllInputOptions)
-                                            {
-                                                opt.IsConnected = (hasInput && curInput > 0 && opt.Code == curInput);
-                                            }
+                                                    // Provide modern candidates for manual configuration in Settings,
+                                                    // but keep unconfirmed candidates hidden from quick controls flyout
+                                                    var candidates = GetModernCandidateInputOptions();
+                                                    foreach (var opt in candidates)
+                                                    {
+                                                        if (!mon.AllInputOptions.Any(o => o.Code == opt.Code))
+                                                        {
+                                                            opt.IsVisibleInFlyout = (hasInput && curInput > 0) ? false : true;
+                                                            mon.AllInputOptions.Add(opt);
+                                                        }
+                                                    }
+                                                }
 
-                                            mon.UpdateVisibleInputOptions();
+                                                if (hasInput && curInput > 0)
+                                                {
+                                                    mon.ActiveInputCode = curInput;
+                                                    mon.SelectedInputCode = curInput;
+                                                }
+                                                else if (mon.AllInputOptions.Count > 0)
+                                                {
+                                                    mon.ActiveInputCode = mon.AllInputOptions[0].Code;
+                                                    mon.SelectedInputCode = mon.AllInputOptions[0].Code;
+                                                }
+
+                                                foreach (var opt in mon.AllInputOptions)
+                                                {
+                                                    opt.IsConnected = (hasInput && curInput > 0 && opt.Code == curInput);
+                                                }
+
+                                                mon.UpdateVisibleInputOptions();
+                                            }
 
                                             results.Add(mon);
                                         }
@@ -534,7 +558,7 @@ namespace Lumina.Services
             }
         }
 
-        public static List<MonitorInputOption> GetStandardInputOptions()
+        public static List<MonitorInputOption> GetModernCandidateInputOptions()
         {
             return new List<MonitorInputOption>
             {
@@ -542,11 +566,11 @@ namespace Lumina.Services
                 new MonitorInputOption { Code = 0x12, DefaultName = "HDMI 2" },
                 new MonitorInputOption { Code = 0x0F, DefaultName = "DisplayPort 1" },
                 new MonitorInputOption { Code = 0x10, DefaultName = "DisplayPort 2" },
-                new MonitorInputOption { Code = 0x13, DefaultName = "USB-C" },
-                new MonitorInputOption { Code = 0x03, DefaultName = "DVI 1" },
-                new MonitorInputOption { Code = 0x01, DefaultName = "VGA 1" }
+                new MonitorInputOption { Code = 0x13, DefaultName = "USB-C" }
             };
         }
+
+        public static List<MonitorInputOption> GetStandardInputOptions() => GetModernCandidateInputOptions();
 
         public static string GetPortNameForCode(uint code) => code switch
         {
@@ -579,18 +603,26 @@ namespace Lumina.Services
 
             try
             {
-                int idx = caps.IndexOf("60(", StringComparison.OrdinalIgnoreCase);
-                if (idx >= 0)
+                var match = System.Text.RegularExpressions.Regex.Match(caps, @"\b60\s*\(\s*([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
                 {
-                    int start = idx + 3;
-                    int end = caps.IndexOf(')', start);
-                    if (end > start)
+                    string inner = match.Groups[1].Value;
+                    var tokens = inner.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var t in tokens)
                     {
-                        string inner = caps.Substring(start, end - start);
-                        var tokens = inner.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var t in tokens)
+                        string codeStr = t.Trim();
+                        int eqIdx = codeStr.IndexOf('=');
+                        if (eqIdx > 0)
                         {
-                            if (uint.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out uint code))
+                            codeStr = codeStr.Substring(0, eqIdx).Trim();
+                        }
+                        if (codeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                        {
+                            codeStr = codeStr.Substring(2);
+                        }
+                        if (uint.TryParse(codeStr, System.Globalization.NumberStyles.HexNumber, null, out uint code))
+                        {
+                            if (!list.Contains(code))
                             {
                                 list.Add(code);
                             }
@@ -611,7 +643,36 @@ namespace Lumina.Services
             try
             {
                 App.Log($"[MonitorService] Setting input on {monitor.FriendlyName} to 0x{inputCode:X2}...");
-                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, inputCode);
+
+                uint valueToSend = inputCode;
+                // If the monitor previously returned high-byte info for VCP 60, preserve it
+                if (monitor.ActiveInputCode.HasValue && (monitor.ActiveInputCode.Value & 0xFF00) != 0 && (inputCode & 0xFF00) == 0)
+                {
+                    valueToSend = (monitor.ActiveInputCode.Value & 0xFF00) | (inputCode & 0xFF);
+                }
+
+                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, valueToSend);
+                if (!ok)
+                {
+                    if (TryReacquirePhysicalHandle(monitor))
+                    {
+                        ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, valueToSend);
+                    }
+                }
+
+                if (!ok && valueToSend != inputCode)
+                {
+                    // Fall back to raw inputCode without preserved high-byte
+                    ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, inputCode);
+                }
+
+                if (!ok)
+                {
+                    // Brief delay and retry in case DDC/CI bus was busy
+                    Thread.Sleep(50);
+                    ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0x60, inputCode);
+                }
+
                 App.Log($"[MonitorService] SetVCPFeature (0x60, 0x{inputCode:X2}) result: {ok}");
                 return ok;
             }
@@ -620,6 +681,33 @@ namespace Lumina.Services
                 App.Log($"[MonitorService] Failed to set input on {monitor.FriendlyName}: {ex.Message}");
                 return false;
             }
+        }
+
+        public uint? GetCurrentInputSource(MonitorInfo monitor)
+        {
+            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.IsActive)
+                return null;
+
+            try
+            {
+                uint pvct = 0, cur = 0, max = 0;
+                if (NativeMethods.GetVCPFeatureAndVCPFeatureReply(monitor.PhysicalHandle, 0x60, out pvct, out cur, out max))
+                {
+                    return cur;
+                }
+                if (TryReacquirePhysicalHandle(monitor))
+                {
+                    if (NativeMethods.GetVCPFeatureAndVCPFeatureReply(monitor.PhysicalHandle, 0x60, out pvct, out cur, out max))
+                    {
+                        return cur;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MonitorService] GetCurrentInputSource error on {monitor.FriendlyName}: {ex.Message}");
+            }
+            return null;
         }
 
         public void SetVolume(MonitorInfo monitor, uint volume, bool isMuted = false)

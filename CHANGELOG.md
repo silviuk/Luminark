@@ -4,6 +4,18 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.14] - 2026-09-28
+
+### Fixed & Enhanced
+- **Monitor Input Selection & Detection**:
+  - **Fixed Phantom & Inaccurate Input Lists**: Stopped unconditionally populating all 7 standard inputs on every monitor. Now queries and respects the monitor's physical DDC/CI MCCS capabilities string (`VCP 0x60`), displaying only the genuine video ports physically supported by the display.
+  - **Robust Capabilities Parsing**: Enhanced MCCS capabilities string parser to support whitespace, name-value pairs, and hex representations across monitor manufacturers (LG, Dell, Samsung, ASUS, etc.).
+  - **Fixed Input Switching Cancellation on Flyout Deactivation**: Resolved a critical bug where losing focus or closing the quick controls tray flyout immediately triggered `Deactivated` and cancelled active input switch countdowns. Flyout dismissal now allows selected input switches to complete normally.
+  - **Immediate Switch Execution ("Switch Now")**: Added a "Switch Now" button to the input switch countdown banner in the tray flyout and bound the `Enter` key to trigger immediate execution without waiting for the countdown timer.
+  - **Resilient Win32 DDC/CI Input Switching**: Added physical monitor handle reacquisition fallback, retry mechanisms, and high-byte preservation to `SetInputSource`, ensuring commands succeed even if the display handle was invalidated or the bus was busy.
+  - **Asynchronous Live Input Polling**: Asynchronously refreshes the active input source when the quick controls flyout opens, keeping input checkmarks up to date if inputs were switched via the monitor's physical OSD buttons.
+  - **Custom Port Code & Input Management**: Added custom port addition (code + custom name) and input removal directly from the Main Dashboard settings.
+
 ## [1.1.13] - 2026-09-28
 
 ### Fixed & Optimized

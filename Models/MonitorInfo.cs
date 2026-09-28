@@ -69,9 +69,12 @@ namespace Lumina.Models
                     _isConnected = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(ConnectionStatusToolTip));
+                    OnPropertyChanged(nameof(CanBeRemoved));
                 }
             }
         }
+
+        public bool CanBeRemoved => !IsConnected;
 
         public string ConnectionStatusToolTip => IsConnected
             ? "Active / Connected signal detected"
@@ -296,7 +299,9 @@ namespace Lumina.Models
             var visibleList = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(AllInputOptions, o => o.IsVisibleInFlyout));
             if (visibleList.Count == 0 && AllInputOptions.Count > 0)
             {
-                visibleList = System.Linq.Enumerable.ToList(AllInputOptions);
+                var fallback = System.Linq.Enumerable.FirstOrDefault(AllInputOptions, o => o.IsConnected)
+                            ?? AllInputOptions[0];
+                visibleList = new List<MonitorInputOption> { fallback };
             }
 
             InputOptions.Clear();
@@ -321,6 +326,26 @@ namespace Lumina.Models
         public void ResetInputName(MonitorInputOption opt)
         {
             opt.CustomName = null;
+        }
+
+        public void AddCustomInputOption(uint code, string name, bool isVisible = true)
+        {
+            if (System.Linq.Enumerable.Any(AllInputOptions, o => o.Code == code)) return;
+            var opt = new MonitorInputOption
+            {
+                Code = code,
+                DefaultName = name,
+                IsVisibleInFlyout = isVisible
+            };
+            AllInputOptions.Add(opt);
+            UpdateVisibleInputOptions();
+        }
+
+        public void RemoveInputOption(MonitorInputOption opt)
+        {
+            if (opt == null || opt.IsConnected) return;
+            AllInputOptions.Remove(opt);
+            UpdateVisibleInputOptions();
         }
 
         private DispatcherTimer? _inputCountdownTimer;
@@ -357,10 +382,14 @@ namespace Lumina.Models
         public string InputCountdownText => $"Switching to {_pendingInputName} in {InputCountdownRemaining}s... [Esc to cancel]";
 
         public Action<MonitorInfo, uint?>? OnInputSelectionRequested { get; set; }
+        private uint? _pendingTargetCode;
+        private Action<MonitorInfo, uint>? _onExecuteSwitch;
 
         public void StartInputCountdown(uint targetCode, string targetName, int durationSeconds, Action<MonitorInfo, uint> onExecute)
         {
             _inputCountdownTimer?.Stop();
+            _pendingTargetCode = targetCode;
+            _onExecuteSwitch = onExecute;
             _pendingInputName = targetName;
             InputCountdownRemaining = durationSeconds > 0 ? durationSeconds : 3;
             IsSwitchingInput = true;
@@ -374,18 +403,25 @@ namespace Lumina.Models
                 InputCountdownRemaining--;
                 if (InputCountdownRemaining <= 0)
                 {
-                    _inputCountdownTimer.Stop();
-                    IsSwitchingInput = false;
-                    _activeInputCode = targetCode;
-                    OnPropertyChanged(nameof(ActiveInputCode));
-                    foreach (var opt in AllInputOptions)
-                    {
-                        opt.IsConnected = (opt.Code == targetCode);
-                    }
-                    onExecute(this, targetCode);
+                    ExecuteInputSwitchNow();
                 }
             };
             _inputCountdownTimer.Start();
+        }
+
+        public void ExecuteInputSwitchNow()
+        {
+            if (IsSwitchingInput && _pendingTargetCode.HasValue)
+            {
+                _inputCountdownTimer?.Stop();
+                IsSwitchingInput = false;
+                uint target = _pendingTargetCode.Value;
+                var callback = _onExecuteSwitch;
+                _pendingTargetCode = null;
+                _onExecuteSwitch = null;
+
+                callback?.Invoke(this, target);
+            }
         }
 
         public void CancelInputSwitch()
@@ -394,6 +430,8 @@ namespace Lumina.Models
             {
                 _inputCountdownTimer?.Stop();
                 IsSwitchingInput = false;
+                _pendingTargetCode = null;
+                _onExecuteSwitch = null;
                 // Revert SelectedInputCode back to ActiveInputCode without re-triggering request
                 _selectedInputCode = ActiveInputCode;
                 OnPropertyChanged(nameof(SelectedInputCode));

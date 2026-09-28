@@ -1,18 +1,9 @@
-What's New in Luminark v1.1.13:
+What's New in Luminark v1.1.14:
 
-• Memory & Performance Optimization:
-  - Eliminated artificial working set ballooning and forced Gen2 GC cycles, establishing smooth and stable memory utilization.
-  - Resolved an unmanaged handle and background thread leak in SettingsService.
-  - Fixed WMI COM object leaks by deterministically disposing all ManagementObject query instances.
-  - Cleaned up static SystemEvents event subscriptions in ThemeService to prevent memory leaks on exit.
-  - Properly released native Win32 GDI icon handles on exit.
-
-• Background Hook & Polling Efficiency:
-  - Refactored TrayScrollHook: Eliminated global mouse movement processing across Windows, saving millions of marshal operations and reducing background CPU usage to 0%.
-  - Refactored NightLightService into a purely event-driven model without polling timeouts, preventing unnecessary CPU and thread wakeups.
-  - Consolidated Keep-Awake timers, pausing high-frequency ticks when sleep prevention is set to Forever.
-  - Increased schedule evaluation interval to 30s for minimal idle impact.
-
-• Security & Reliability Enhancements:
-  - Added startup safety recovery for Windows Console Lock Display Timeout (VIDEOCONLOCK) to ensure lock screen timeout is never stuck at 1s after an abnormal termination.
-  - Added log file rotation capped at 5 MB in App.Log to prevent unbounded disk usage.
+• Monitor Video Input Switching & Detection Fixes:
+  - Fixed phantom inputs: Stopped populating unverified standard inputs (e.g. VGA, DVI, extra HDMI ports). The app now accurately respects your monitor's hardware DDC/CI capabilities (VCP 0x60) to show only physical ports.
+  - Fixed input switch cancellation: Closing or clicking outside the quick controls tray flyout no longer aborts active input switches.
+  - Added "Switch Now" button: Added an immediate execution button and Enter key shortcut to switch inputs instantly without waiting for the countdown timer.
+  - Resilient DDC/CI communication: Added automatic handle reacquisition, retries, and high-byte preservation to ensure input switch commands reach the monitor hardware reliably.
+  - Background live input synchronization: Active input status is refreshed when opening the tray flyout, remaining synchronized even when inputs are changed using the monitor's physical OSD buttons.
+  - Custom input management: Added custom port code addition and input removal directly from the Main Dashboard settings.

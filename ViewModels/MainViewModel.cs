@@ -454,6 +454,14 @@ namespace Lumina.ViewModels
                     existing.SupportsAudioVolume = fresh.SupportsAudioVolume;
                     existing.SupportsAudioMute = fresh.SupportsAudioMute;
                     existing.SupportsInputSelect = fresh.SupportsInputSelect;
+                    if (fresh.SupportsInputSelect && existing.AllInputOptions.Count == 0 && fresh.AllInputOptions.Count > 0)
+                    {
+                        foreach (var opt in fresh.AllInputOptions)
+                        {
+                            existing.AllInputOptions.Add(opt);
+                        }
+                        ConfigureMonitorInputOptions(existing);
+                    }
                     if (!_isUpdatingIndividualBrightness && !_isUpdatingMasterBrightness)
                     {
                         existing.CurrentBrightness = fresh.CurrentBrightness;
@@ -634,23 +642,47 @@ namespace Lumina.ViewModels
                     return;
                 }
 
+                uint previousCode = m.ActiveInputCode ?? 0;
                 var opt = m.AllInputOptions.FirstOrDefault(o => o.Code == targetCode.Value)
                        ?? m.InputOptions.FirstOrDefault(o => o.Code == targetCode.Value);
                 string targetName = opt?.Name ?? $"Input (0x{targetCode.Value:X2})";
+
+                Action<MonitorInfo, uint> executeSwitch = (monitorToSwitch, code) =>
+                {
+                    bool success = _monitorService.SetInputSource(monitorToSwitch, code);
+                    if (success)
+                    {
+                        monitorToSwitch.ActiveInputCode = code;
+                        monitorToSwitch.SelectedInputCode = code;
+                        foreach (var o in monitorToSwitch.AllInputOptions)
+                        {
+                            o.IsConnected = (o.Code == code);
+                        }
+                    }
+                    else
+                    {
+                        App.Log($"[MainViewModel] SetInputSource failed on {monitorToSwitch.FriendlyName} for 0x{code:X2}. Reverting.");
+                        if (previousCode > 0)
+                        {
+                            monitorToSwitch.ActiveInputCode = previousCode;
+                            monitorToSwitch.SelectedInputCode = previousCode;
+                            foreach (var o in monitorToSwitch.AllInputOptions)
+                            {
+                                o.IsConnected = (o.Code == previousCode);
+                            }
+                        }
+                    }
+                };
 
                 int delay = MonitorInputSwitchDelaySeconds;
                 if (delay <= 0)
                 {
                     m.CancelInputSwitch();
-                    m.ActiveInputCode = targetCode.Value;
-                    _monitorService.SetInputSource(m, targetCode.Value);
+                    executeSwitch(m, targetCode.Value);
                 }
                 else
                 {
-                    m.StartInputCountdown(targetCode.Value, targetName, delay, (monitorToSwitch, code) =>
-                    {
-                        _monitorService.SetInputSource(monitorToSwitch, code);
-                    });
+                    m.StartInputCountdown(targetCode.Value, targetName, delay, executeSwitch);
                 }
             };
         }
@@ -659,11 +691,25 @@ namespace Lumina.ViewModels
         {
             if (_settings.CustomInputNames.TryGetValue(mon.Id, out var savedInputNames))
             {
-                foreach (var opt in mon.AllInputOptions)
+                foreach (var kvp in savedInputNames)
                 {
-                    if (savedInputNames.TryGetValue(opt.Code, out var name) && !string.IsNullOrWhiteSpace(name))
+                    var existingOpt = mon.AllInputOptions.FirstOrDefault(o => o.Code == kvp.Key);
+                    if (existingOpt != null)
                     {
-                        opt.CustomName = name;
+                        if (!string.IsNullOrWhiteSpace(kvp.Value))
+                        {
+                            existingOpt.CustomName = kvp.Value;
+                        }
+                    }
+                    else
+                    {
+                        mon.AllInputOptions.Add(new MonitorInputOption
+                        {
+                            Code = kvp.Key,
+                            DefaultName = MonitorService.GetPortNameForCode(kvp.Key),
+                            CustomName = kvp.Value,
+                            IsVisibleInFlyout = true
+                        });
                     }
                 }
             }
@@ -706,6 +752,61 @@ namespace Lumina.ViewModels
             }
 
             mon.UpdateVisibleInputOptions();
+        }
+
+        public void AddCustomInput(MonitorInfo monitor, uint code, string name)
+        {
+            if (monitor == null || code == 0) return;
+            string portName = !string.IsNullOrWhiteSpace(name) ? name.Trim() : MonitorService.GetPortNameForCode(code);
+            monitor.AddCustomInputOption(code, portName, true);
+            ConfigureMonitorInputOptions(monitor);
+            SaveSettings();
+        }
+
+        public void RemoveInputOption(MonitorInfo monitor, MonitorInputOption input)
+        {
+            if (monitor == null || input == null || input.IsConnected) return;
+            monitor.RemoveInputOption(input);
+            if (_settings.CustomInputNames.TryGetValue(monitor.Id, out var dict))
+            {
+                dict.Remove(input.Code);
+            }
+            if (_settings.VisibleInputCodes.TryGetValue(monitor.Id, out var visList))
+            {
+                visList.Remove(input.Code);
+            }
+            SaveSettings();
+            monitor.UpdateVisibleInputOptions();
+        }
+
+        public async Task RefreshCurrentInputsAsync()
+        {
+            var ddcMonitors = Monitors.Where(m => m.IsActive && m.SupportsInputSelect && m.Type == MonitorType.DdcCi).ToList();
+            if (ddcMonitors.Count == 0) return;
+
+            await Task.Run(() =>
+            {
+                foreach (var mon in ddcMonitors)
+                {
+                    if (mon.IsSwitchingInput) continue;
+                    uint? current = _monitorService.GetCurrentInputSource(mon);
+                    if (current.HasValue && current.Value > 0 && current.Value != mon.ActiveInputCode)
+                    {
+                        App.Current.Dispatcher.Invoke(() =>
+                        {
+                            if (!mon.IsSwitchingInput)
+                            {
+                                mon.ActiveInputCode = current.Value;
+                                mon.SelectedInputCode = current.Value;
+                                foreach (var opt in mon.AllInputOptions)
+                                {
+                                    opt.IsConnected = (opt.Code == current.Value);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
         }
 
         public void ResetInputName(MonitorInfo monitor, MonitorInputOption input)

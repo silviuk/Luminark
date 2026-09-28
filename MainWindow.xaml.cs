@@ -592,6 +592,46 @@ namespace Lumina
             }
         }
 
+        private void OnRemoveInputOptionClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is Models.MonitorInputOption opt)
+            {
+                var monitor = System.Linq.Enumerable.FirstOrDefault(_viewModel.Monitors, m => m.AllInputOptions.Contains(opt));
+                if (monitor != null)
+                {
+                    _viewModel.RemoveInputOption(monitor, opt);
+                }
+            }
+        }
+
+        private void OnAddCustomInputClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement btn && btn.Tag is Models.MonitorInfo monitor)
+            {
+                if (btn.Parent is System.Windows.Controls.Grid grid)
+                {
+                    var textboxes = grid.Children.OfType<System.Windows.Controls.TextBox>().ToList();
+                    var codeBox = textboxes.FirstOrDefault();
+                    var nameBox = textboxes.Skip(1).FirstOrDefault();
+                    if (codeBox != null && !string.IsNullOrWhiteSpace(codeBox.Text))
+                    {
+                        string codeText = codeBox.Text.Trim();
+                        if (codeText.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                        {
+                            codeText = codeText.Substring(2);
+                        }
+                        if (uint.TryParse(codeText, System.Globalization.NumberStyles.HexNumber, null, out uint code) && code > 0)
+                        {
+                            string name = nameBox?.Text?.Trim() ?? "";
+                            _viewModel.AddCustomInput(monitor, code, name);
+                            codeBox.Text = "";
+                            if (nameBox != null) nameBox.Text = "";
+                        }
+                    }
+                }
+            }
+        }
+
         public static void TrimMemory()
         {
             try

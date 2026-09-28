@@ -326,6 +326,7 @@
                                                                             <ColumnDefinition Width="58" />
                                                                             <ColumnDefinition Width="*" />
                                                                             <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="Auto" />
                                                                         </Grid.ColumnDefinitions>
 
                                                                         <!-- Visibility checkbox -->
@@ -380,10 +381,39 @@
                                                                                    VerticalAlignment="Center">
                                                                             <ui:SymbolIcon Symbol="ArrowReset24" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                                                         </ui:Button>
+
+                                                                        <!-- Delete button (visible when not actively connected) -->
+                                                                        <ui:Button Grid.Column="5"
+                                                                                   Appearance="Transparent"
+                                                                                   Padding="4,4"
+                                                                                   Margin="2,0,0,0"
+                                                                                   ToolTip="Remove this input from list"
+                                                                                   Click="OnRemoveInputOptionClicked"
+                                                                                   Tag="{Binding}"
+                                                                                   Visibility="{Binding CanBeRemoved, Converter={StaticResource BoolToVis}}"
+                                                                                   VerticalAlignment="Center">
+                                                                            <ui:SymbolIcon Symbol="Delete24" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                                        </ui:Button>
                                                                     </Grid>
                                                                 </DataTemplate>
                                                             </ItemsControl.ItemTemplate>
                                                         </ItemsControl>
+
+                                                        <!-- Add Custom Input Option Row -->
+                                                        <Border Margin="0,8,0,0" Padding="8,6" Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="70" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0" Text="Add Port:" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                                <ui:TextBox Grid.Column="1" PlaceholderText="0x1B" FontSize="11" Padding="6,3" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="Hex code (e.g. 0x1B, 0x05, 0x11)" />
+                                                                <ui:TextBox Grid.Column="2" PlaceholderText="Port Name (e.g. USB-C 2)" FontSize="11" Padding="6,3" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                                <ui:Button Grid.Column="3" Content="Add" Appearance="Secondary" FontSize="11" Padding="10,3" VerticalAlignment="Center" Click="OnAddCustomInputClicked" Tag="{Binding}" />
+                                                            </Grid>
+                                                        </Border>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>

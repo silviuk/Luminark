@@ -383,14 +383,22 @@
                                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
                                                    VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <ui:Button Grid.Column="1"
-                                                   Appearance="Secondary"
-                                                   Content="Cancel"
-                                                   FontSize="10"
-                                                   Padding="6,2"
-                                                   Margin="4,0,0,0"
-                                                   Click="OnCancelInputSwitchClicked"
-                                                   Tag="{Binding}" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <ui:Button Appearance="Primary"
+                                                       Content="Switch Now"
+                                                       FontSize="10"
+                                                       Padding="6,2"
+                                                       Margin="4,0,0,0"
+                                                       Click="OnExecuteInputSwitchNowClicked"
+                                                       Tag="{Binding}" />
+                                            <ui:Button Appearance="Secondary"
+                                                       Content="Cancel"
+                                                       FontSize="10"
+                                                       Padding="6,2"
+                                                       Margin="4,0,0,0"
+                                                       Click="OnCancelInputSwitchClicked"
+                                                       Tag="{Binding}" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </StackPanel>
