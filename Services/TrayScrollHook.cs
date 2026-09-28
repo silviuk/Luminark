@@ -19,7 +19,6 @@ namespace Lumina.Services
         private System.Drawing.Point _lastHoverPos;
         public System.Drawing.Point? LastHoverPosition => _lastHoverPos != System.Drawing.Point.Empty ? _lastHoverPos : null;
         private DateTime _lastHoverTime = DateTime.MinValue;
-        private bool _isHoveringIcon = false;
 
         public TrayScrollHook(NotifyIcon notifyIcon)
         {
@@ -27,14 +26,12 @@ namespace Lumina.Services
             _notifyIcon.MouseMove += (s, e) =>
             {
                 _lastHoverPos = Cursor.Position;
-                _isHoveringIcon = true;
                 _lastHoverTime = DateTime.UtcNow;
             };
 
             _notifyIcon.MouseDown += (s, e) =>
             {
                 _lastHoverPos = Cursor.Position;
-                _isHoveringIcon = true;
                 _lastHoverTime = DateTime.UtcNow;
             };
 
@@ -183,7 +180,6 @@ namespace Lumina.Services
                 if (isOverTray)
                 {
                     _lastHoverTime = DateTime.UtcNow;
-                    _isHoveringIcon = true;
                     short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
                     App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
                     Scrolled?.Invoke(delta);

@@ -1380,7 +1380,6 @@ namespace Lumina.ViewModels
         private System.Windows.Threading.DispatcherTimer? _preventSleepTimer;
         private System.Threading.Timer? _backgroundHeartbeatTimer;
         private DateTime? _preventSleepExpiry;
-        private int _heartbeatCounter = 0;
         private IntPtr _powerRequestHandle = IntPtr.Zero;
         private bool _powerRequestSystemSet = false;
         private bool _powerRequestDisplaySet = false;
@@ -1662,7 +1661,6 @@ namespace Lumina.ViewModels
 
         private void StartPreventSleepTimer()
         {
-            _heartbeatCounter = 0;
             if (_backgroundHeartbeatTimer == null)
             {
                 _backgroundHeartbeatTimer = new System.Threading.Timer(_ =>
@@ -1714,7 +1712,6 @@ namespace Lumina.ViewModels
             _preventSleepTimer?.Stop();
             _backgroundHeartbeatTimer?.Dispose();
             _backgroundHeartbeatTimer = null;
-            _heartbeatCounter = 0;
         }
 
         public string AutomationModeText

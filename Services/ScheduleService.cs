@@ -15,6 +15,7 @@ namespace Lumina.Services
         private readonly DispatcherTimer _timer;
         private bool? _lastAppliedDayMode = null;
         private Func<IEnumerable<MonitorInfo>>? _activeMonitorsProvider;
+        private int _ticksSinceLastTrim = 0;
 
         public event Action<bool>? ScheduleTriggered;
 
@@ -67,6 +68,34 @@ namespace Lumina.Services
         private void OnTimerTick(object? sender, EventArgs e)
         {
             EvaluateSchedule(force: false);
+
+            _ticksSinceLastTrim++;
+            if (_ticksSinceLastTrim >= 20)
+            {
+                _ticksSinceLastTrim = 0;
+                try
+                {
+                    bool isAnyWindowVisible = false;
+                    var app = System.Windows.Application.Current;
+                    if (app != null)
+                    {
+                        foreach (System.Windows.Window w in app.Windows)
+                        {
+                            if (w.IsVisible)
+                            {
+                                isAnyWindowVisible = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isAnyWindowVisible)
+                    {
+                        Lumina.MainWindow.TrimMemory();
+                    }
+                }
+                catch { }
+            }
         }
 
         private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)

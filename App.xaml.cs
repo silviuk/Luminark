@@ -199,6 +199,18 @@ namespace Lumina
                 Log("Starting ScheduleService");
                 _scheduleService.Start();
 
+                // Shed startup JIT/XAML allocations after initialization stabilizes
+                _ = System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (mainWindow.Visibility != Visibility.Visible || mainWindow.WindowState == WindowState.Minimized)
+                        {
+                            Lumina.MainWindow.TrimMemory();
+                        }
+                    });
+                });
+
                 Log("Application_Startup completed successfully.");
             }
             catch (Exception ex)

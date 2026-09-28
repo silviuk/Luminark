@@ -4,6 +4,15 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.15] - 2026-09-28
+
+### Fixed & Optimized
+- **Aggressive Runtime Memory Optimization & Working Set Reduction**:
+  - **Re-engineered Memory Trimming**: Re-implemented comprehensive working set trimming in `MainWindow.TrimMemory()` utilizing full Gen2 garbage collection, finalizer draining, Large Object Heap (LOH) compaction, and Win32 `EmptyWorkingSet` + `SetProcessWorkingSetSize`. This aggressively sheds resident cold pages, DirectX/Direct3D render buffers, and JIT-compiled assemblies down to a minimal ~15–30 MB working set when idle in the tray.
+  - **Shed Startup JIT & XAML Memory**: Added a 3-second post-startup stabilization task that automatically purges transient initialization buffers, monitor enumeration structures, and XAML parser artifacts after the application completes startup minimized to the tray.
+  - **Periodic Idle Memory Maintenance**: Added a periodic background memory maintenance check in `ScheduleService` (every ~10 minutes) that runs only when all application windows are hidden/minimized, permanently preventing memory ballooning or creep over multi-day runtimes.
+  - **Enabled .NET 8 Dynamic Adaptation to Application Sizes (DATAS)**: Configured `GarbageCollectionAdaptationMode=1` in the project runtime settings, enabling .NET 8 DATAS GC to dynamically shrink GC heap size and boundaries according to actual live demand for desktop utility processes.
+
 ## [1.1.14] - 2026-09-28
 
 ### Fixed & Enhanced

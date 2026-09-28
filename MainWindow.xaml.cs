@@ -636,7 +636,14 @@ namespace Lumina
         {
             try
             {
-                GC.Collect(1, GCCollectionMode.Default, false);
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+
+                using var proc = System.Diagnostics.Process.GetCurrentProcess();
+                NativeMethods.EmptyWorkingSet(proc.Handle);
+                NativeMethods.SetProcessWorkingSetSize(proc.Handle, (IntPtr)(-1), (IntPtr)(-1));
             }
             catch { }
         }

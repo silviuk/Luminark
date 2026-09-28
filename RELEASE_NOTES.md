@@ -1,9 +1,7 @@
-What's New in Luminark v1.1.14:
+What's New in Luminark v1.1.15:
 
-• Monitor Video Input Switching & Detection Fixes:
-  - Fixed phantom inputs: Stopped populating unverified standard inputs (e.g. VGA, DVI, extra HDMI ports). The app now accurately respects your monitor's hardware DDC/CI capabilities (VCP 0x60) to show only physical ports.
-  - Fixed input switch cancellation: Closing or clicking outside the quick controls tray flyout no longer aborts active input switches.
-  - Added "Switch Now" button: Added an immediate execution button and Enter key shortcut to switch inputs instantly without waiting for the countdown timer.
-  - Resilient DDC/CI communication: Added automatic handle reacquisition, retries, and high-byte preservation to ensure input switch commands reach the monitor hardware reliably.
-  - Background live input synchronization: Active input status is refreshed when opening the tray flyout, remaining synchronized even when inputs are changed using the monitor's physical OSD buttons.
-  - Custom input management: Added custom port code addition and input removal directly from the Main Dashboard settings.
+• Runtime Memory Reduction & Performance Optimization:
+  - Working Set Trimming: Resolved an issue where idle background memory could reach ~150-200 MB. Re-implemented an intelligent working set trim combining full Gen2 GC, LOH compaction, and Win32 process working set trimming, bringing idle tray memory down to ~15-30 MB.
+  - Startup Buffer Cleanup: Automatically sheds temporary XAML compilation, DirectX buffers, and monitor enumeration allocations 3 seconds after launching minimized to the tray.
+  - Periodic Idle Maintenance: Added background idle memory maintenance every 10 minutes when all windows are closed, ensuring memory remains consistently lean over multi-day runtimes.
+  - .NET 8 DATAS Enabled: Activated Dynamic Adaptation to Application Sizes (DATAS) garbage collection, tuning heap sizes dynamically to minimize memory footprint.
