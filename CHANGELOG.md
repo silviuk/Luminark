@@ -4,6 +4,15 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.16] - 2026-09-29
+
+### Fixed & Enhanced
+- **Mouse Responsiveness & Jitter Elimination**:
+  - **Thread-Isolated Low-Level Mouse Hook (`TrayScrollHook`)**: Moved the global low-level mouse hook (`WH_MOUSE_LL`) off the main WPF UI thread and onto a dedicated, high-priority background STA worker thread with its own lightweight Win32 message loop. The hook procedure now returns in nanoseconds and dispatches scroll actions asynchronously, completely preventing UI freezes, DDC/CI communications, or garbage collection from delaying OS mouse input.
+  - **Offloaded Monitor Enumeration & Hardware I2C Queries**: Converted multi-stage display change detection (`DBT_DEVNODES_CHANGED`) and monitor redetection to run asynchronously in background tasks. DDC/CI VCP queries and MCCS capabilities string reads over physical I2C buses no longer block the UI message loop.
+  - **Eliminated Synthetic Mouse Nudges**: Completely removed synthetic `mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0)` keep-awake calls from `ReapplyAwakeState`, preventing zero-delta input packet injection from interfering with physical mouse movement and high-polling-rate gaming mice.
+  - **Tray Scroll Wheel Toggle Setting**: Added a user setting and dashboard toggle switch under Settings ("Mouse Wheel Scroll on Tray Icon") to allow enabling or disabling tray scroll brightness adjustment on demand.
+
 ## [1.1.15] - 2026-09-28
 
 ### Fixed & Optimized

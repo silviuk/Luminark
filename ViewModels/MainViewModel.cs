@@ -159,10 +159,13 @@ namespace Lumina.ViewModels
                     await System.Threading.Tasks.Task.Delay(2000, token);
                     if (token.IsCancellationRequested) return;
 
+                    App.Log("[MainViewModel] Display change detection (Stage 1 @ 2.0s) -> scanning monitors in background");
+                    var detected1 = _monitorService.EnumerateMonitors();
+                    if (token.IsCancellationRequested) return;
+
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        App.Log("[MainViewModel] Display change detection (Stage 1 @ 2.0s) -> scanning monitors");
-                        RefreshMonitors();
+                        ApplyDetectedMonitors(detected1);
                     });
 
                     // Stage 2: Wait another 2.0s (4.0s total from event).
@@ -170,10 +173,13 @@ namespace Lumina.ViewModels
                     await System.Threading.Tasks.Task.Delay(2000, token);
                     if (token.IsCancellationRequested) return;
 
+                    App.Log("[MainViewModel] Display change detection (Stage 2 @ 4.0s) -> scanning monitors in background");
+                    var detected2 = _monitorService.EnumerateMonitors();
+                    if (token.IsCancellationRequested) return;
+
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        App.Log("[MainViewModel] Display change detection (Stage 2 @ 4.0s) -> scanning monitors");
-                        RefreshMonitors();
+                        ApplyDetectedMonitors(detected2);
                     });
 
                     // Stage 3: If only 1 monitor was detected so far (e.g. laptop internal screen),
@@ -189,10 +195,13 @@ namespace Lumina.ViewModels
                         await System.Threading.Tasks.Task.Delay(2000, token);
                         if (token.IsCancellationRequested) return;
 
+                        App.Log("[MainViewModel] Display change detection (Stage 3 @ 6.0s, count <= 1) -> scanning monitors in background");
+                        var detected3 = _monitorService.EnumerateMonitors();
+                        if (token.IsCancellationRequested) return;
+
                         await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                         {
-                            App.Log("[MainViewModel] Display change detection (Stage 3 @ 6.0s, count <= 1) -> scanning monitors");
-                            RefreshMonitors();
+                            ApplyDetectedMonitors(detected3);
                         });
                     }
                 }
@@ -426,7 +435,24 @@ namespace Lumina.ViewModels
         public void RefreshMonitors(bool forceRecreate = false)
         {
             var detected = _monitorService.EnumerateMonitors();
+            ApplyDetectedMonitors(detected, forceRecreate);
+        }
 
+        public async System.Threading.Tasks.Task RefreshMonitorsAsync(bool forceRecreate = false)
+        {
+            var detected = await System.Threading.Tasks.Task.Run(() => _monitorService.EnumerateMonitors());
+            if (System.Windows.Application.Current?.Dispatcher != null)
+            {
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => ApplyDetectedMonitors(detected, forceRecreate));
+            }
+            else
+            {
+                ApplyDetectedMonitors(detected, forceRecreate);
+            }
+        }
+
+        public void ApplyDetectedMonitors(List<MonitorInfo> detected, bool forceRecreate = false)
+        {
             bool sameActiveSet = !forceRecreate &&
                 Monitors.Count > 0 &&
                 Monitors.Count(m => m.IsActive) == detected.Count &&
@@ -1258,6 +1284,23 @@ namespace Lumina.ViewModels
             }
         }
 
+        public event Action<bool>? TrayScrollSettingChanged;
+
+        public bool EnableTrayScrollBrightness
+        {
+            get => _settings.EnableTrayScrollBrightness;
+            set
+            {
+                if (_settings.EnableTrayScrollBrightness != value)
+                {
+                    _settings.EnableTrayScrollBrightness = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    TrayScrollSettingChanged?.Invoke(value);
+                }
+            }
+        }
+
         public event Action? ShortcutsConfigChanged;
 
         public bool EnableGlobalShortcuts
@@ -1590,17 +1633,6 @@ namespace Lumina.ViewModels
 
                 var result = NativeMethods.SetThreadExecutionState(esFlags);
                 App.Log($"[Power] ReapplyAwakeState (locked={_isWorkstationLocked}): SetThreadExecutionState returned {result}");
-
-                // 3. Dispatch safe zero-delta mouse nudge ONLY when workstation is unlocked
-                // When locked, do NOT send mouse events so monitors can sleep properly while PC stays awake.
-                if (!_isWorkstationLocked)
-                {
-                    try
-                    {
-                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
-                    }
-                    catch { }
-                }
             }
         }
 

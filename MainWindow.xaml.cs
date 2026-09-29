@@ -116,7 +116,14 @@ namespace Lumina
                     Visible = true
                 };
 
-                _scrollHook = new TrayScrollHook(_notifyIcon);
+                _scrollHook = new TrayScrollHook(_notifyIcon, _viewModel.EnableTrayScrollBrightness);
+                _viewModel.TrayScrollSettingChanged += enabled =>
+                {
+                    if (_scrollHook != null)
+                    {
+                        _scrollHook.IsEnabled = enabled;
+                    }
+                };
                 _scrollHook.Scrolled += delta =>
                 {
                     Dispatcher.Invoke(() =>
@@ -209,7 +216,7 @@ namespace Lumina
 
                 var redetectItem = new ToolStripMenuItem("Re-detect Displays", null, (s, e) =>
                 {
-                    Dispatcher.Invoke(() => _viewModel.RefreshMonitors(forceRecreate: true));
+                    _ = _viewModel.RefreshMonitorsAsync(forceRecreate: true);
                 });
                 contextMenu.Items.Add(redetectItem);
 
@@ -462,7 +469,7 @@ namespace Lumina
 
         private void OnRefreshDisplaysClicked(object sender, RoutedEventArgs e)
         {
-            _viewModel.RefreshMonitors(forceRecreate: true);
+            _ = _viewModel.RefreshMonitorsAsync(forceRecreate: true);
         }
 
         private void OnPresetClicked(object sender, RoutedEventArgs e)

@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Lumina.Services
@@ -13,6 +14,11 @@ namespace Lumina.Services
         private IntPtr _hookId = IntPtr.Zero;
         private IntPtr _trayHwnd = IntPtr.Zero;
         private uint _trayId = 1;
+        private uint _hookThreadId = 0;
+        private Thread? _hookThread;
+        private readonly ManualResetEventSlim _startedEvent = new(false);
+        private volatile bool _disposed = false;
+        private volatile bool _isEnabled = true;
 
         public event Action<int>? Scrolled;
 
@@ -20,9 +26,31 @@ namespace Lumina.Services
         public System.Drawing.Point? LastHoverPosition => _lastHoverPos != System.Drawing.Point.Empty ? _lastHoverPos : null;
         private DateTime _lastHoverTime = DateTime.MinValue;
 
-        public TrayScrollHook(NotifyIcon notifyIcon)
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set
+            {
+                if (_isEnabled != value)
+                {
+                    _isEnabled = value;
+                    if (_isEnabled)
+                    {
+                        StartHookThread();
+                    }
+                    else
+                    {
+                        StopHookThread();
+                    }
+                }
+            }
+        }
+
+        public TrayScrollHook(NotifyIcon notifyIcon, bool isEnabled = true)
         {
             _notifyIcon = notifyIcon;
+            _isEnabled = isEnabled;
+
             _notifyIcon.MouseMove += (s, e) =>
             {
                 _lastHoverPos = Cursor.Position;
@@ -36,7 +64,10 @@ namespace Lumina.Services
             };
 
             ExtractNotifyIconIdentifiers();
-            StartHook();
+            if (_isEnabled)
+            {
+                StartHookThread();
+            }
         }
 
         private void ExtractNotifyIconIdentifiers()
@@ -93,14 +124,76 @@ namespace Lumina.Services
             return false;
         }
 
-        private void StartHook()
+        private void StartHookThread()
         {
-            _proc = HookCallback;
-            using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
-            using var curModule = curProcess.MainModule;
-            IntPtr moduleHandle = NativeMethods.GetModuleHandle(curModule?.ModuleName);
-            _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc, moduleHandle, 0);
-            App.Log($"[TrayScrollHook] Hook started. HookId={_hookId}");
+            if (_hookThread != null && _hookThread.IsAlive) return;
+
+            _startedEvent.Reset();
+            _hookThread = new Thread(HookThreadProc)
+            {
+                IsBackground = true,
+                Name = "LuminarkTrayScrollHookThread",
+                Priority = ThreadPriority.Highest
+            };
+            _hookThread.SetApartmentState(ApartmentState.STA);
+            _hookThread.Start();
+            _startedEvent.Wait(2000);
+        }
+
+        private void StopHookThread()
+        {
+            if (_hookThreadId != 0)
+            {
+                NativeMethods.PostThreadMessage(_hookThreadId, NativeMethods.WM_QUIT, UIntPtr.Zero, IntPtr.Zero);
+            }
+            if (_hookThread != null && _hookThread.IsAlive)
+            {
+                _hookThread.Join(1000);
+                _hookThread = null;
+            }
+            _hookThreadId = 0;
+            _hookId = IntPtr.Zero;
+        }
+
+        private void HookThreadProc()
+        {
+            try
+            {
+                _hookThreadId = NativeMethods.GetCurrentThreadId();
+                _proc = HookCallback;
+                using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
+                using var curModule = curProcess.MainModule;
+                IntPtr moduleHandle = NativeMethods.GetModuleHandle(curModule?.ModuleName);
+                _hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc, moduleHandle, 0);
+                App.Log($"[TrayScrollHook] Hook started on dedicated thread (tid={_hookThreadId}). HookId={_hookId}");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[TrayScrollHook] Failed to start hook on dedicated thread: {ex.Message}");
+            }
+            finally
+            {
+                _startedEvent.Set();
+            }
+
+            // Dedicated Win32 message pump with ThreadPriority.Highest and zero UI/GC work.
+            // Guarantees that Windows OS hook queries return in microseconds.
+            while (!_disposed && NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                NativeMethods.TranslateMessage(ref msg);
+                NativeMethods.DispatchMessage(ref msg);
+            }
+
+            if (_hookId != IntPtr.Zero)
+            {
+                try
+                {
+                    NativeMethods.UnhookWindowsHookEx(_hookId);
+                }
+                catch { }
+                _hookId = IntPtr.Zero;
+                App.Log("[TrayScrollHook] Hook removed.");
+            }
         }
 
         [ThreadStatic]
@@ -150,7 +243,7 @@ namespace Lumina.Services
 
         private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL)
+            if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL && _isEnabled)
             {
                 var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
                 bool isOverTray = false;
@@ -182,7 +275,12 @@ namespace Lumina.Services
                     _lastHoverTime = DateTime.UtcNow;
                     short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
                     App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
-                    Scrolled?.Invoke(delta);
+                    
+                    var action = Scrolled;
+                    if (action != null)
+                    {
+                        ThreadPool.QueueUserWorkItem(_ => action(delta));
+                    }
                     return (IntPtr)1; // Consume so taskbar doesn't scroll
                 }
             }
@@ -192,11 +290,9 @@ namespace Lumina.Services
 
         public void Dispose()
         {
-            if (_hookId != IntPtr.Zero)
-            {
-                NativeMethods.UnhookWindowsHookEx(_hookId);
-                _hookId = IntPtr.Zero;
-            }
+            _disposed = true;
+            StopHookThread();
+            _startedEvent.Dispose();
         }
     }
 }
