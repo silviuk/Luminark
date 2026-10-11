@@ -249,6 +249,8 @@ namespace Lumina
             }
         }
 
+        private IntPtr _displayStateNotifyHandle = IntPtr.Zero;
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
@@ -259,6 +261,9 @@ namespace Lumina
                 var source = System.Windows.Interop.HwndSource.FromHwnd(handle);
                 source?.AddHook(WndProc);
                 UpdateDwmTheme(_viewModel.IsLightTheme);
+
+                Guid consoleDisplayGuid = NativeMethods.GUID_CONSOLE_DISPLAY_STATE;
+                _displayStateNotifyHandle = NativeMethods.RegisterPowerSettingNotification(handle, ref consoleDisplayGuid, 0);
 
                 _hotkeyService = new HotkeyService(_viewModel);
                 _hotkeyService.Initialize(handle);
@@ -321,6 +326,11 @@ namespace Lumina
             _isExplicitExit = true;
             try
             {
+                if (_displayStateNotifyHandle != IntPtr.Zero)
+                {
+                    try { NativeMethods.UnregisterPowerSettingNotification(_displayStateNotifyHandle); } catch { }
+                    _displayStateNotifyHandle = IntPtr.Zero;
+                }
                 _hotkeyService?.Dispose();
                 _hotkeyService = null;
                 _scrollHook?.Dispose();
@@ -356,20 +366,35 @@ namespace Lumina
             else if (msg == 0x0218) // WM_POWERBROADCAST
             {
                 int powerEvent = wParam.ToInt32();
-                App.Log($"[MainWindow] WM_POWERBROADCAST received (powerEvent=0x{powerEvent:X})");
+                if (powerEvent == NativeMethods.PBT_POWERSETTINGCHANGE && lParam != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var setting = System.Runtime.InteropServices.Marshal.PtrToStructure<NativeMethods.POWERBROADCAST_SETTING>(lParam);
+                        if (setting.PowerSetting == NativeMethods.GUID_CONSOLE_DISPLAY_STATE)
+                        {
+                            string stateStr = setting.Data switch { 0 => "Off (0)", 1 => "On (1)", 2 => "Dimmed (2)", _ => setting.Data.ToString() };
+                            App.Log($"[Power] Console display state -> {stateStr}");
+                        }
+                    }
+                    catch { }
+                }
+                else
+                {
+                    App.Log($"[MainWindow] WM_POWERBROADCAST received (powerEvent=0x{powerEvent:X})");
+                }
                 _viewModel.ReapplyAwakeState();
             }
             else if (msg == 0x007E) // WM_DISPLAYCHANGE
             {
                 App.Log("[MainWindow] WM_DISPLAYCHANGE received");
-                _viewModel.ScheduleDisplaySettingsRefresh();
+                _viewModel.ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
             }
             else if (msg == NativeMethods.WM_DEVICECHANGE)
             {
                 if ((int)wParam == NativeMethods.DBT_DEVNODES_CHANGED)
                 {
-                    App.Log("[MainWindow] WM_DEVICECHANGE (DBT_DEVNODES_CHANGED) received");
-                    _viewModel.ScheduleDisplaySettingsRefresh();
+                    _viewModel.ScheduleDisplaySettingsRefresh(isDisplayEvent: false);
                 }
             }
             else if (msg == WM_SYSCOMMAND && ((int)wParam & 0xFFF0) == SC_CLOSE)

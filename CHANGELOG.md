@@ -4,6 +4,15 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.17] - 2026-10-11
+
+### Fixed & Enhanced
+- **Reliable "Lock & Screen Off" Across Internal Laptop Displays & External Monitors**:
+  - **Fixed Per-Thread `ES_DISPLAY_REQUIRED` Kernel Hold Leak**: Resolved a critical Win32 threading issue where the background 30-second keep-awake timer (`_backgroundHeartbeatTimer`) invoked `SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED)` on random `.NET ThreadPool` worker threads. Because `SetThreadExecutionState` is tracked per-thread in the Windows kernel, clearing `ES_DISPLAY_REQUIRED` on the UI thread when locking left orphaned display-required holds on ThreadPool threads that permanently blocked Windows from powering off screens. All `SetThreadExecutionState` calls are now strictly marshaled onto the main UI thread.
+  - **Eliminated Premature 5-Second `VIDEOCONLOCK` Reset**: Removed the 5-second timer that restored `VIDEOCONLOCK` back to 60s before Windows 11 `LogonUI.exe` and Windows Hello finished their ~6–8 second lock screen transition. Both `VIDEOCONLOCK` and `VIDEOIDLE` are now held at 1s for the duration of the lock session (even when "Turn off display" is set to "Never") and cleanly restored to their original AC/DC values upon `SessionUnlock`, application exit, or startup recovery.
+  - **Post-Lock Multi-Wave Display Power-Down**: Moved external DDC/CI monitor standby commands (`VCP 0xD6 = 0x02` Standby + `0x04` Off with automatic physical handle re-acquisition) and desktop `SC_MONITORPOWER(2)` broadcasts into cancellable post-lock waves (`1.2s`, `4.0s`, and `9.5s` after `LockWorkStation()`), ensuring `LogonUI.exe` desktop switching does not immediately wake external monitors back up.
+  - **Suppressed Background Monitor Probing While Locked**: Deferred `WM_DISPLAYCHANGE` and `WM_DEVICECHANGE` (`DBT_DEVNODES_CHANGED`) I2C hardware scans while the workstation is locked so background device events never wake sleeping monitors.
+
 ## [1.1.16] - 2026-09-29
 
 ### Fixed & Enhanced

@@ -370,6 +370,7 @@ namespace Lumina.Services
         #region Windows Power Policy Settings (powrprof.dll)
 
         public static readonly Guid GUID_SUB_VIDEO = new Guid("7516b95f-f776-4464-8c53-06167f40cc99");
+        public static readonly Guid GUID_VIDEOIDLE = new Guid("3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e");
         public static readonly Guid GUID_VIDEOCONLOCK = new Guid("8EC4B3A5-6868-48c2-BE75-4F3044BE88A7");
 
         [DllImport("powrprof.dll", SetLastError = true)]
@@ -417,10 +418,17 @@ namespace Lumina.Services
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr LocalFree(IntPtr hMem);
 
-        public static bool SetConsoleLockDisplayTimeout(uint seconds, out uint originalAc, out uint originalDc)
+        public static bool SetConsoleLockDisplayTimeout(
+            uint seconds,
+            out uint originalConLockAc,
+            out uint originalConLockDc,
+            out uint originalVideoIdleAc,
+            out uint originalVideoIdleDc)
         {
-            originalAc = 60;
-            originalDc = 60;
+            originalConLockAc = 60;
+            originalConLockDc = 60;
+            originalVideoIdleAc = 300;
+            originalVideoIdleDc = 180;
             try
             {
                 if (PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) != 0 || pGuid == IntPtr.Zero)
@@ -438,12 +446,17 @@ namespace Lumina.Services
 
                 Guid subVideo = GUID_SUB_VIDEO;
                 Guid videoConLock = GUID_VIDEOCONLOCK;
+                Guid videoIdle = GUID_VIDEOIDLE;
 
-                PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalAc);
-                PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalDc);
+                PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalConLockAc);
+                PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out originalConLockDc);
+                PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, out originalVideoIdleAc);
+                PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, out originalVideoIdleDc);
 
                 PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, seconds);
                 PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, seconds);
+                PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, seconds);
+                PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, seconds);
                 PowerSetActiveScheme(IntPtr.Zero, ref scheme);
                 return true;
             }
@@ -454,7 +467,11 @@ namespace Lumina.Services
             }
         }
 
-        public static bool RestoreConsoleLockDisplayTimeout(uint originalAc, uint originalDc)
+        public static bool RestoreConsoleLockDisplayTimeout(
+            uint originalConLockAc,
+            uint originalConLockDc,
+            uint? originalVideoIdleAc = null,
+            uint? originalVideoIdleDc = null)
         {
             try
             {
@@ -473,9 +490,17 @@ namespace Lumina.Services
 
                 Guid subVideo = GUID_SUB_VIDEO;
                 Guid videoConLock = GUID_VIDEOCONLOCK;
+                Guid videoIdle = GUID_VIDEOIDLE;
 
-                PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalAc);
-                PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalDc);
+                PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalConLockAc);
+                PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, originalConLockDc);
+
+                if (originalVideoIdleAc.HasValue && originalVideoIdleDc.HasValue)
+                {
+                    PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, originalVideoIdleAc.Value);
+                    PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, originalVideoIdleDc.Value);
+                }
+
                 PowerSetActiveScheme(IntPtr.Zero, ref scheme);
                 return true;
             }
@@ -485,6 +510,43 @@ namespace Lumina.Services
                 return false;
             }
         }
+
+        public static void ReapplyActivePowerScheme()
+        {
+            try
+            {
+                if (PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) == 0 && pGuid != IntPtr.Zero)
+                {
+                    try
+                    {
+                        Guid scheme = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid))!;
+                        PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+                    }
+                    finally
+                    {
+                        LocalFree(pGuid);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static readonly Guid GUID_CONSOLE_DISPLAY_STATE = new Guid("6fe69556-704a-47a0-8f24-c28d936fda47");
+        public const int PBT_POWERSETTINGCHANGE = 0x8013;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POWERBROADCAST_SETTING
+        {
+            public Guid PowerSetting;
+            public uint DataLength;
+            public byte Data;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr RegisterPowerSettingNotification(IntPtr hRecipient, ref Guid PowerSettingGuid, int Flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool UnregisterPowerSettingNotification(IntPtr Handle);
 
         #endregion
 

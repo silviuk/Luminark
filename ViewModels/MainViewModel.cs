@@ -52,17 +52,25 @@ namespace Lumina.ViewModels
                 _isWorkstationLocked = NativeMethods.IsWorkstationLocked();
                 App.Log($"[MainViewModel] Initial lock state: locked={_isWorkstationLocked}");
 
-                // Safeguard: Check if VIDEOCONLOCK was left at 1s due to an unexpected termination
+                // Safeguard: Check if VIDEOCONLOCK or VIDEOIDLE was left at <= 5s due to an unexpected termination
                 if (NativeMethods.PowerGetActiveScheme(IntPtr.Zero, out IntPtr pGuid) == 0 && pGuid != IntPtr.Zero)
                 {
                     Guid scheme = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid))!;
                     NativeMethods.LocalFree(pGuid);
                     Guid subVideo = NativeMethods.GUID_SUB_VIDEO;
                     Guid videoConLock = NativeMethods.GUID_VIDEOCONLOCK;
-                    if (NativeMethods.PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out uint acVal) == 0 && acVal <= 1)
+                    Guid videoIdle = NativeMethods.GUID_VIDEOIDLE;
+                    uint acVal = 60, dcVal = 60, idleAc = 300, idleDc = 180;
+                    NativeMethods.PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out acVal);
+                    NativeMethods.PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoConLock, out dcVal);
+                    NativeMethods.PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, out idleAc);
+                    NativeMethods.PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subVideo, ref videoIdle, out idleDc);
+                    if (acVal <= 5 || dcVal <= 5 || (idleAc > 0 && idleAc <= 5) || (idleDc > 0 && idleDc <= 5))
                     {
-                        NativeMethods.RestoreConsoleLockDisplayTimeout(60, 60);
-                        App.Log("[Power] Startup recovered VIDEOCONLOCK from 1s -> restored to 60s");
+                        uint targetIdleAc = (idleAc > 0 && idleAc <= 5) ? 300u : idleAc;
+                        uint targetIdleDc = (idleDc > 0 && idleDc <= 5) ? 180u : idleDc;
+                        NativeMethods.RestoreConsoleLockDisplayTimeout(60, 60, targetIdleAc, targetIdleDc);
+                        App.Log($"[Power] Startup recovered VIDEOCONLOCK/VIDEOIDLE from AC={acVal}s/DC={dcVal}s (Idle AC={idleAc}s/DC={idleDc}s) -> restored");
                     }
                 }
             }
@@ -93,11 +101,13 @@ namespace Lumina.ViewModels
         }
 
         private System.Threading.CancellationTokenSource? _displayChangeCts;
+        private System.Threading.CancellationTokenSource? _lockPowerOffCts;
+        private bool _displayChangedWhileLocked = false;
 
         private void OnDisplaySettingsChanged(object? sender, EventArgs e)
         {
             App.Log("[MainViewModel] SystemEvents.DisplaySettingsChanged triggered");
-            ScheduleDisplaySettingsRefresh();
+            ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
         }
 
         private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
@@ -115,11 +125,25 @@ namespace Lumina.ViewModels
             if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock)
             {
                 _isWorkstationLocked = true;
+                try
+                {
+                    _displayChangeCts?.Cancel();
+                    _displayChangeCts?.Dispose();
+                    _displayChangeCts = null;
+                }
+                catch { }
                 App.Log("[Power] Workstation locked");
             }
             else if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)
             {
                 _isWorkstationLocked = false;
+                try
+                {
+                    _lockPowerOffCts?.Cancel();
+                    _lockPowerOffCts?.Dispose();
+                    _lockPowerOffCts = null;
+                }
+                catch { }
                 App.Log("[Power] Workstation unlocked: restoring displays and awake state");
                 RestoreLockDisplayTimeout();
                 System.Threading.Tasks.Task.Run(() =>
@@ -130,6 +154,12 @@ namespace Lumina.ViewModels
                     }
                     catch { }
                 });
+
+                if (_displayChangedWhileLocked)
+                {
+                    _displayChangedWhileLocked = false;
+                    ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
+                }
             }
 
             if (_settings.PreventSleep)
@@ -138,8 +168,18 @@ namespace Lumina.ViewModels
             }
         }
 
-        public void ScheduleDisplaySettingsRefresh()
+        public void ScheduleDisplaySettingsRefresh(bool isDisplayEvent = true)
         {
+            if (_isWorkstationLocked)
+            {
+                if (isDisplayEvent)
+                {
+                    _displayChangedWhileLocked = true;
+                    App.Log("[MainViewModel] Display change event deferred because workstation is locked");
+                }
+                return;
+            }
+
             try
             {
                 _displayChangeCts?.Cancel();
@@ -157,25 +197,42 @@ namespace Lumina.ViewModels
                     // Stage 1: Wait 2.0s after the display change event.
                     // This gives the USB-C DP Alt mode / HDMI / GPU link training time to settle.
                     await System.Threading.Tasks.Task.Delay(2000, token);
-                    if (token.IsCancellationRequested) return;
+                    if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
-                    App.Log("[MainViewModel] Display change detection (Stage 1 @ 2.0s) -> scanning monitors in background");
+                    int prevActiveCount = 0;
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        prevActiveCount = Monitors.Count(m => m.IsActive);
+                    });
+
+                    if (isDisplayEvent)
+                    {
+                        App.Log("[MainViewModel] Display change detection (Stage 1 @ 2.0s) -> scanning monitors in background");
+                    }
                     var detected1 = _monitorService.EnumerateMonitors();
-                    if (token.IsCancellationRequested) return;
+                    if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
+                    int newActiveCount = detected1.Count(m => m.IsActive);
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
                         ApplyDetectedMonitors(detected1);
                     });
 
+                    // If triggered by a generic WM_DEVICECHANGE (DBT_DEVNODES_CHANGED) and the active monitor count
+                    // did not change in Stage 1, skip Stages 2 and 3 to avoid redundant I2C/WMI polling.
+                    if (!isDisplayEvent && newActiveCount == prevActiveCount)
+                    {
+                        return;
+                    }
+
                     // Stage 2: Wait another 2.0s (4.0s total from event).
                     // Slower USB-C docks or 4K/high-res monitors often need 2.5-3.5s to finish DDC/CI initialization.
                     await System.Threading.Tasks.Task.Delay(2000, token);
-                    if (token.IsCancellationRequested) return;
+                    if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
                     App.Log("[MainViewModel] Display change detection (Stage 2 @ 4.0s) -> scanning monitors in background");
                     var detected2 = _monitorService.EnumerateMonitors();
-                    if (token.IsCancellationRequested) return;
+                    if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
@@ -193,11 +250,11 @@ namespace Lumina.ViewModels
                     if (count <= 1)
                     {
                         await System.Threading.Tasks.Task.Delay(2000, token);
-                        if (token.IsCancellationRequested) return;
+                        if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
                         App.Log("[MainViewModel] Display change detection (Stage 3 @ 6.0s, count <= 1) -> scanning monitors in background");
                         var detected3 = _monitorService.EnumerateMonitors();
-                        if (token.IsCancellationRequested) return;
+                        if (token.IsCancellationRequested || _isWorkstationLocked) return;
 
                         await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                         {
@@ -207,7 +264,7 @@ namespace Lumina.ViewModels
                 }
                 catch (System.OperationCanceledException)
                 {
-                    // Debounced by a newer event
+                    // Debounced by a newer event or cancelled on lock
                 }
                 catch (Exception ex)
                 {
@@ -1431,6 +1488,8 @@ namespace Lumina.ViewModels
         private bool _isWorkstationLocked = false;
         private uint? _savedLockTimeoutAc = null;
         private uint? _savedLockTimeoutDc = null;
+        private uint? _savedVideoIdleAc = null;
+        private uint? _savedVideoIdleDc = null;
         private readonly object _lockTimeoutLock = new();
 
         private void RestoreLockDisplayTimeout()
@@ -1441,10 +1500,14 @@ namespace Lumina.ViewModels
                 {
                     uint ac = _savedLockTimeoutAc.Value;
                     uint dc = _savedLockTimeoutDc.Value;
+                    uint? idleAc = _savedVideoIdleAc;
+                    uint? idleDc = _savedVideoIdleDc;
                     _savedLockTimeoutAc = null;
                     _savedLockTimeoutDc = null;
-                    NativeMethods.RestoreConsoleLockDisplayTimeout(ac, dc);
-                    App.Log($"[Power] Restored VIDEOCONLOCK to AC={ac}s, DC={dc}s");
+                    _savedVideoIdleAc = null;
+                    _savedVideoIdleDc = null;
+                    NativeMethods.RestoreConsoleLockDisplayTimeout(ac, dc, idleAc, idleDc);
+                    App.Log($"[Power] Restored VIDEOCONLOCK to AC={ac}s, DC={dc}s (VIDEOIDLE AC={idleAc}s, DC={idleDc}s)");
                 }
             }
         }
@@ -1605,6 +1668,24 @@ namespace Lumina.ViewModels
             }
         }
 
+        private void ApplyUiThreadExecutionState(NativeMethods.EXECUTION_STATE esFlags)
+        {
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null && !disp.CheckAccess())
+            {
+                disp.BeginInvoke(() =>
+                {
+                    var res = NativeMethods.SetThreadExecutionState(esFlags);
+                    App.Log($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
+                });
+            }
+            else
+            {
+                var res = NativeMethods.SetThreadExecutionState(esFlags);
+                App.Log($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
+            }
+        }
+
         public void ReapplyAwakeState()
         {
             if (_settings.PreventSleep)
@@ -1621,7 +1702,9 @@ namespace Lumina.ViewModels
                     App.Log("[Power] Cleared PowerRequestDisplayRequired on reapply (workstation is locked)");
                 }
 
-                // 2. Reaffirm thread execution state (system + away mode, and display only when unlocked)
+                // 2. Reaffirm thread execution state strictly on the main UI thread.
+                // SetThreadExecutionState is per-thread in Windows; calling it on ThreadPool threads
+                // would leave orphaned ES_DISPLAY_REQUIRED holds in the kernel that block display turn-off.
                 var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                               NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
                               NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
@@ -1631,8 +1714,7 @@ namespace Lumina.ViewModels
                     esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
                 }
 
-                var result = NativeMethods.SetThreadExecutionState(esFlags);
-                App.Log($"[Power] ReapplyAwakeState (locked={_isWorkstationLocked}): SetThreadExecutionState returned {result}");
+                ApplyUiThreadExecutionState(esFlags);
             }
         }
 
@@ -1647,7 +1729,7 @@ namespace Lumina.ViewModels
                     // 1. Kernel Power Request (modern Windows 10/11 & S0 Modern Standby)
                     EnablePowerRequests();
 
-                    // 2. Thread Execution State (legacy / defense-in-depth)
+                    // 2. Thread Execution State (strictly on UI thread)
                     var esFlags = NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
                                   NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
                                   NativeMethods.EXECUTION_STATE.ES_AWAYMODE_REQUIRED;
@@ -1656,8 +1738,7 @@ namespace Lumina.ViewModels
                         esFlags |= NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED;
                     }
 
-                    var result = NativeMethods.SetThreadExecutionState(esFlags);
-                    App.Log($"[Power] SetThreadExecutionState returned: {result}");
+                    ApplyUiThreadExecutionState(esFlags);
 
                     if (_settings.PreventSleepDurationMinutes > 0)
                     {
@@ -1679,9 +1760,8 @@ namespace Lumina.ViewModels
                     // 1. Clear kernel power requests
                     DisablePowerRequests();
 
-                    // 2. Clear thread execution state
-                    var result = NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
-                    App.Log($"[Power] Normal SetThreadExecutionState returned: {result}");
+                    // 2. Clear thread execution state on UI thread
+                    ApplyUiThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
                 }
                 OnPropertyChanged(nameof(PreventSleepRemainingText));
             }
@@ -1889,40 +1969,53 @@ namespace Lumina.ViewModels
 
             _isWorkstationLocked = true;
 
+            // Cancel any pending display refresh or previous lock power-off sequence
+            try
+            {
+                _displayChangeCts?.Cancel();
+                _displayChangeCts?.Dispose();
+                _displayChangeCts = null;
+            }
+            catch { }
+
+            try
+            {
+                _lockPowerOffCts?.Cancel();
+                _lockPowerOffCts?.Dispose();
+            }
+            catch { }
+
+            _lockPowerOffCts = new System.Threading.CancellationTokenSource();
+            var lockToken = _lockPowerOffCts.Token;
+
             // 1. If PreventSleep is active, immediately reapply awake state to clear DisplayRequired
+            // on both the kernel PowerRequest object and the UI thread's ExecutionState,
             // while keeping SystemRequired, ExecutionRequired, and AwayModeRequired active.
             if (PreventSleep)
             {
                 ReapplyAwakeState();
             }
 
-            // 2. Put external DDC/CI monitors into power standby mode (0x04) immediately
-            try
-            {
-                _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[MainViewModel] SetAllExternalMonitorsPowerMode(0x04) error: {ex.Message}");
-            }
-
-            // 3. Configure Windows Console Lock Display Off Timeout (VIDEOCONLOCK) to 1 second.
-            // On Windows 10/11 (especially S0 Modern Standby), sending SC_MONITORPOWER (2) triggers
-            // an explicit 'SleepButton' transition into system sleep, overriding idle keep-awake settings.
-            // By contrast, setting VIDEOCONLOCK to 1 second causes Windows to turn off all displays
-            // naturally via idle timeout, completely powering off backlights while preserving CPU,
-            // Wi-Fi connectivity, and background execution.
+            // 2. Configure Windows Console Lock Display Off Timeout (VIDEOCONLOCK) and Video Idle (VIDEOIDLE) to 1 second.
+            // Keep both at 1s for the duration of the lock session (restored on SessionUnlock or Dispose)
+            // because Windows 11 LogonUI and Windows Hello hold the display active for ~5-8 seconds on lock;
+            // restoring VIDEOCONLOCK prematurely at 5s cancels the display power-down before it ever fires.
             lock (_lockTimeoutLock)
             {
-                if (NativeMethods.SetConsoleLockDisplayTimeout(1, out uint origAc, out uint origDc))
+                if (NativeMethods.SetConsoleLockDisplayTimeout(1, out uint origAc, out uint origDc, out uint origIdleAc, out uint origIdleDc))
                 {
-                    _savedLockTimeoutAc = origAc;
-                    _savedLockTimeoutDc = origDc;
-                    App.Log($"[Power] Set VIDEOCONLOCK to 1s (saved: AC={origAc}s, DC={origDc}s)");
+                    if (!_savedLockTimeoutAc.HasValue)
+                    {
+                        _savedLockTimeoutAc = origAc > 5 ? origAc : 60u;
+                        _savedLockTimeoutDc = origDc > 5 ? origDc : 60u;
+                        _savedVideoIdleAc = (origIdleAc == 0 || origIdleAc > 5) ? origIdleAc : 300u;
+                        _savedVideoIdleDc = (origIdleDc == 0 || origIdleDc > 5) ? origIdleDc : 180u;
+                    }
+                    App.Log($"[Power] Set VIDEOCONLOCK & VIDEOIDLE to 1s (saved ConLock: AC={_savedLockTimeoutAc}s/DC={_savedLockTimeoutDc}s, VideoIdle: AC={_savedVideoIdleAc}s/DC={_savedVideoIdleDc}s)");
                 }
             }
 
-            // 4. Lock workstation
+            // 3. Lock workstation
             try
             {
                 NativeMethods.LockWorkStation();
@@ -1932,13 +2025,65 @@ namespace Lumina.ViewModels
                 App.Log($"[MainViewModel] LockWorkStation error: {ex.Message}");
             }
 
-            // 5. Restore VIDEOCONLOCK back to original value after displays have powered down (5 seconds)
-            // so that when the user wakes the screen with mouse/keyboard, the lock screen displays
-            // at normal brightness and gives the user their full normal timeout to enter their password.
-            System.Threading.Tasks.Task.Delay(5000).ContinueWith(_ =>
+            // 4. Schedule post-lock display power-down waves after LockWorkStation and LogonUI settle.
+            // Sending DDC/CI standby before LockWorkStation fails because switching to the LogonUI desktop
+            // immediately wakes external monitors back up.
+            bool preventSleepSnapshot = PreventSleep;
+            bool isDesktop = false;
+            try
             {
-                RestoreLockDisplayTimeout();
-            });
+                isDesktop = System.Windows.Forms.SystemInformation.PowerStatus.BatteryChargeStatus
+                    .HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery);
+            }
+            catch { }
+
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    // Wave 1 (1.2s): After initial LockWorkStation transition
+                    await System.Threading.Tasks.Task.Delay(1200, lockToken);
+                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
+
+                    NativeMethods.ReapplyActivePowerScheme();
+                    if (!preventSleepSnapshot || isDesktop)
+                    {
+                        NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
+                        App.Log($"[Power] Wave 1 (1.2s): Broadcast SC_MONITORPOWER(2) (PreventSleep={preventSleepSnapshot}, isDesktop={isDesktop})");
+                    }
+                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
+
+                    // Wave 2 (4.0s): After LogonUI / credential provider initialization
+                    await System.Threading.Tasks.Task.Delay(2800, lockToken);
+                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
+
+                    NativeMethods.ReapplyActivePowerScheme();
+                    if (!preventSleepSnapshot || isDesktop)
+                    {
+                        NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
+                        App.Log($"[Power] Wave 2 (4.0s): Broadcast SC_MONITORPOWER(2) (PreventSleep={preventSleepSnapshot}, isDesktop={isDesktop})");
+                    }
+                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
+
+                    // Wave 3 (9.5s): After Windows 11 ~8.5s lock screen display reconfiguration settles
+                    await System.Threading.Tasks.Task.Delay(5500, lockToken);
+                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
+
+                    if (!preventSleepSnapshot || isDesktop)
+                    {
+                        NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
+                    }
+                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
+                }
+                catch (System.OperationCanceledException)
+                {
+                    // Cancelled because user unlocked the session
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[MainViewModel] Post-lock display power-off error: {ex.Message}");
+                }
+            }, lockToken);
         }
 
         #endregion
@@ -1956,6 +2101,8 @@ namespace Lumina.ViewModels
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+                try { _displayChangeCts?.Cancel(); _displayChangeCts?.Dispose(); } catch { }
+                try { _lockPowerOffCts?.Cancel(); _lockPowerOffCts?.Dispose(); } catch { }
                 StopPreventSleepTimer();
                 DisablePowerRequests();
                 NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);

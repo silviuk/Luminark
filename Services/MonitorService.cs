@@ -764,12 +764,38 @@ namespace Lumina.Services
 
         public void SetMonitorPowerMode(MonitorInfo monitor, uint powerMode)
         {
-            if (monitor.Type != MonitorType.DdcCi || monitor.PhysicalHandle == IntPtr.Zero || !monitor.IsActive) return;
+            if (monitor.Type != MonitorType.DdcCi || !monitor.IsActive) return;
             try
             {
+                if (monitor.PhysicalHandle == IntPtr.Zero)
+                {
+                    TryReacquirePhysicalHandle(monitor);
+                }
+                if (monitor.PhysicalHandle == IntPtr.Zero) return;
+
                 // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off
-                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
-                App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6, 0x{powerMode:X2}) result: {ok}");
+                if (powerMode == 0x04)
+                {
+                    // Some external monitors expect 0x02 (DPM Standby) while others expect 0x04 (DPM Off).
+                    // Send 0x02 first, then 0x04, re-acquiring the physical handle if invalidated by desktop switch.
+                    bool okStandby = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x02);
+                    if (!okStandby && TryReacquirePhysicalHandle(monitor))
+                    {
+                        okStandby = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x02);
+                    }
+                    Thread.Sleep(40);
+                    bool okOff = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x04);
+                    App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6 Standby/Off) result: 0x02={okStandby}, 0x04={okOff}");
+                }
+                else
+                {
+                    bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
+                    if (!ok && TryReacquirePhysicalHandle(monitor))
+                    {
+                        ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
+                    }
+                    App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6, 0x{powerMode:X2}) result: {ok}");
+                }
             }
             catch (Exception ex)
             {
@@ -779,12 +805,10 @@ namespace Lumina.Services
 
         public void SetAllExternalMonitorsPowerMode(IEnumerable<MonitorInfo> monitors, uint powerMode)
         {
-            foreach (var m in monitors)
+            var list = monitors.Where(m => m.Type == MonitorType.DdcCi && m.IsActive).ToList();
+            foreach (var m in list)
             {
-                if (m.Type == MonitorType.DdcCi && m.PhysicalHandle != IntPtr.Zero && m.IsActive)
-                {
-                    SetMonitorPowerMode(m, powerMode);
-                }
+                SetMonitorPowerMode(m, powerMode);
             }
         }
 

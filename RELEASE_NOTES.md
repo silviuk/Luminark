@@ -1,7 +1,7 @@
-What's New in Luminark v1.1.16:
+What's New in Luminark v1.1.17:
 
-• Mouse Responsiveness & Jitter Elimination:
-  - Isolated Tray Mouse Hook: Moved the system tray scroll hook to a dedicated, high-priority background thread with its own message pump. Mouse hook callbacks now return instantly in nanoseconds, completely eliminating cursor stutter or jitter during normal PC usage.
-  - Asynchronous Hardware I2C Queries: Offloaded physical monitor enumeration and DDC/CI queries to background tasks so hardware display scans during USB/device changes never block the UI thread.
-  - Removed Synthetic Mouse Events: Eliminated zero-delta mouse nudge events from the keep-awake service, ensuring smooth, uninterrupted cursor tracking for high-polling-rate mice.
-  - Tray Scroll Toggle Setting: Added a toggle switch in Settings to enable or disable mouse wheel brightness adjustments over the system tray icon.
+• Reliable "Lock & Screen Off" for Laptop & External Displays:
+  - Fixed Per-Thread Keep-Awake Leak: Ensured Win32 SetThreadExecutionState calls always execute on the main UI thread rather than background ThreadPool threads, preventing orphaned ES_DISPLAY_REQUIRED kernel holds from blocking display turn-off when locking with Prevent Sleep enabled.
+  - Persistent Lock Display Timeout: Removed the premature 5-second timeout reset that cancelled screen power-off while Windows 11 LogonUI and Windows Hello were still initializing. Both Console Lock (VIDEOCONLOCK) and Video Idle (VIDEOIDLE) timeouts now remain at 1s while locked and restore automatically upon unlock, exit, or startup.
+  - Multi-Wave External Monitor Standby: Sequenced DDC/CI power-off commands (both VCP 0xD6 0x02 Standby and 0x04 Off with physical handle re-acquisition) and desktop SC_MONITORPOWER broadcasts after LockWorkStation settles so lock screen rendering never wakes external monitors back up.
+  - Lock-Aware Device Change Filtering: Suppressed background WM_DEVICECHANGE / I2C monitor scans while the workstation is locked so sleeping monitors are never awakened by background PnP events.
