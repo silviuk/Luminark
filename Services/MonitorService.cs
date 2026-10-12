@@ -773,29 +773,16 @@ namespace Lumina.Services
                 }
                 if (monitor.PhysicalHandle == IntPtr.Zero) return;
 
-                // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off
-                if (powerMode == 0x04)
+                // VCP 0xD6: 0x01 = On, 0x02 = Standby, 0x03 = Suspend, 0x04 = Off.
+                // Never send 0x04 (Soft Power Off) as it turns off the scaler/USB-C PD controller on LG monitors,
+                // preventing wake-on-signal and requiring an AC mains power cycle. Map 0x04 to 0x02 (DPMS Standby).
+                uint safeMode = powerMode == 0x04 ? 0x02u : powerMode;
+                bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, safeMode);
+                if (!ok && TryReacquirePhysicalHandle(monitor))
                 {
-                    // Some external monitors expect 0x02 (DPM Standby) while others expect 0x04 (DPM Off).
-                    // Send 0x02 first, then 0x04, re-acquiring the physical handle if invalidated by desktop switch.
-                    bool okStandby = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x02);
-                    if (!okStandby && TryReacquirePhysicalHandle(monitor))
-                    {
-                        okStandby = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x02);
-                    }
-                    Thread.Sleep(40);
-                    bool okOff = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, 0x04);
-                    App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6 Standby/Off) result: 0x02={okStandby}, 0x04={okOff}");
+                    ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, safeMode);
                 }
-                else
-                {
-                    bool ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
-                    if (!ok && TryReacquirePhysicalHandle(monitor))
-                    {
-                        ok = NativeMethods.SetVCPFeature(monitor.PhysicalHandle, 0xD6, powerMode);
-                    }
-                    App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6, 0x{powerMode:X2}) result: {ok}");
-                }
+                App.Log($"[MonitorService] SetMonitorPowerMode ({monitor.FriendlyName}, 0xD6, 0x{safeMode:X2}) result: {ok}");
             }
             catch (Exception ex)
             {

@@ -375,6 +375,7 @@ namespace Lumina
                         {
                             string stateStr = setting.Data switch { 0 => "Off (0)", 1 => "On (1)", 2 => "Dimmed (2)", _ => setting.Data.ToString() };
                             App.Log($"[Power] Console display state -> {stateStr}");
+                            _viewModel.OnConsoleDisplayStateChanged(setting.Data);
                         }
                     }
                     catch { }

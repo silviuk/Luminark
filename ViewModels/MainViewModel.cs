@@ -103,6 +103,52 @@ namespace Lumina.ViewModels
         private System.Threading.CancellationTokenSource? _displayChangeCts;
         private System.Threading.CancellationTokenSource? _lockPowerOffCts;
         private bool _displayChangedWhileLocked = false;
+        private volatile int _consoleDisplayState = 1; // 0 = Off, 1 = On, 2 = Dimmed
+
+        public void OnConsoleDisplayStateChanged(byte state)
+        {
+            _consoleDisplayState = state;
+            if (state == 0)
+            {
+                // Displays have powered down! Cancel any remaining post-lock power-off waves
+                // so we never disturb the sleeping display or USB-C DP Alt-Mode link.
+                try
+                {
+                    _lockPowerOffCts?.Cancel();
+                }
+                catch { }
+
+                // Restore normal VIDEOCONLOCK (60s) and VIDEOIDLE (300s/180s) 2 seconds after the display turns off.
+                // This ensures that when the user later wakes the laptop (or reconnects USB-C) while still on the lock screen,
+                // Windows keeps the video signal alive for the full 60+ seconds instead of cutting the DisplayPort/USB-C link
+                // after 1 second mid-handshake.
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000);
+                        RestoreLockDisplayTimeout();
+                    }
+                    catch { }
+                });
+            }
+            else if (state == 1)
+            {
+                // If Windows turned the display on and the workstation is actually unlocked (e.g. after ARSO boot),
+                // ensure _isWorkstationLocked is synced.
+                if (_isWorkstationLocked && !NativeMethods.IsWorkstationLocked())
+                {
+                    _isWorkstationLocked = false;
+                    App.Log("[Power] Workstation detected unlocked on display wake -> syncing state");
+                    RestoreLockDisplayTimeout();
+                    if (_displayChangedWhileLocked)
+                    {
+                        _displayChangedWhileLocked = false;
+                        ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
+                    }
+                }
+            }
+        }
 
         private void OnDisplaySettingsChanged(object? sender, EventArgs e)
         {
@@ -146,20 +192,11 @@ namespace Lumina.ViewModels
                 catch { }
                 App.Log("[Power] Workstation unlocked: restoring displays and awake state");
                 RestoreLockDisplayTimeout();
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    try
-                    {
-                        _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x01);
-                    }
-                    catch { }
-                });
 
-                if (_displayChangedWhileLocked)
-                {
-                    _displayChangedWhileLocked = false;
-                    ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
-                }
+                // Always schedule a progressive display refresh on unlock so external USB-C / DP monitors
+                // have their physical DDC/CI handles cleanly re-acquired after link training settles.
+                _displayChangedWhileLocked = false;
+                ScheduleDisplaySettingsRefresh(isDisplayEvent: true);
             }
 
             if (_settings.PreventSleep)
@@ -172,12 +209,21 @@ namespace Lumina.ViewModels
         {
             if (_isWorkstationLocked)
             {
-                if (isDisplayEvent)
+                if (!NativeMethods.IsWorkstationLocked())
                 {
-                    _displayChangedWhileLocked = true;
-                    App.Log("[MainViewModel] Display change event deferred because workstation is locked");
+                    _isWorkstationLocked = false;
+                    App.Log("[Power] Workstation detected unlocked during display refresh -> syncing state");
+                    RestoreLockDisplayTimeout();
                 }
-                return;
+                else
+                {
+                    if (isDisplayEvent)
+                    {
+                        _displayChangedWhileLocked = true;
+                        App.Log("[MainViewModel] Display change event deferred because workstation is locked");
+                    }
+                    return;
+                }
             }
 
             try
@@ -1688,6 +1734,13 @@ namespace Lumina.ViewModels
 
         public void ReapplyAwakeState()
         {
+            if (_isWorkstationLocked && _consoleDisplayState == 1 && !NativeMethods.IsWorkstationLocked())
+            {
+                _isWorkstationLocked = false;
+                App.Log("[Power] Workstation detected unlocked during awake reapply -> syncing state");
+                RestoreLockDisplayTimeout();
+            }
+
             if (_settings.PreventSleep)
             {
                 // 1. Ensure kernel power requests are active (modern Windows 10/11 & S0 Modern Standby)
@@ -2026,8 +2079,10 @@ namespace Lumina.ViewModels
             }
 
             // 4. Schedule post-lock display power-down waves after LockWorkStation and LogonUI settle.
-            // Sending DDC/CI standby before LockWorkStation fails because switching to the LogonUI desktop
-            // immediately wakes external monitors back up.
+            // Do NOT send DDC/CI VCP 0xD6 power-off commands to external monitors: letting Windows drop the video signal
+            // natively via VIDEOCONLOCK / SC_MONITORPOWER allows external USB-C / DP / HDMI monitors (such as 42" LG 4K displays)
+            // to enter their native hardware standby cleanly and wake automatically when video signal returns, without wedging
+            // the monitor's internal scaler or USB-C PD / DP Alt-Mode controller.
             bool preventSleepSnapshot = PreventSleep;
             bool isDesktop = false;
             try
@@ -2043,7 +2098,7 @@ namespace Lumina.ViewModels
                 {
                     // Wave 1 (1.2s): After initial LockWorkStation transition
                     await System.Threading.Tasks.Task.Delay(1200, lockToken);
-                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
+                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked || _consoleDisplayState == 0) return;
 
                     NativeMethods.ReapplyActivePowerScheme();
                     if (!preventSleepSnapshot || isDesktop)
@@ -2051,11 +2106,10 @@ namespace Lumina.ViewModels
                         NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
                         App.Log($"[Power] Wave 1 (1.2s): Broadcast SC_MONITORPOWER(2) (PreventSleep={preventSleepSnapshot}, isDesktop={isDesktop})");
                     }
-                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
 
-                    // Wave 2 (4.0s): After LogonUI / credential provider initialization
+                    // Wave 2 (4.0s): Only if displays have not yet powered down while LogonUI / Windows Hello initialized
                     await System.Threading.Tasks.Task.Delay(2800, lockToken);
-                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
+                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked || _consoleDisplayState == 0) return;
 
                     NativeMethods.ReapplyActivePowerScheme();
                     if (!preventSleepSnapshot || isDesktop)
@@ -2063,21 +2117,15 @@ namespace Lumina.ViewModels
                         NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
                         App.Log($"[Power] Wave 2 (4.0s): Broadcast SC_MONITORPOWER(2) (PreventSleep={preventSleepSnapshot}, isDesktop={isDesktop})");
                     }
-                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
 
-                    // Wave 3 (9.5s): After Windows 11 ~8.5s lock screen display reconfiguration settles
-                    await System.Threading.Tasks.Task.Delay(5500, lockToken);
-                    if (lockToken.IsCancellationRequested || !_isWorkstationLocked) return;
-
-                    if (!preventSleepSnapshot || isDesktop)
-                    {
-                        NativeMethods.PostMessage((IntPtr)NativeMethods.HWND_BROADCAST, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MONITORPOWER, (IntPtr)2);
-                    }
-                    _monitorService.SetAllExternalMonitorsPowerMode(Monitors, 0x04);
+                    // Fallback (10.0s total): Restore VIDEOCONLOCK and VIDEOIDLE to normal values even if GUID_CONSOLE_DISPLAY_STATE
+                    // notification was not yet received, ensuring lock screen wake-up always has the full timeout for USB-C link training.
+                    await System.Threading.Tasks.Task.Delay(6000, lockToken);
+                    RestoreLockDisplayTimeout();
                 }
                 catch (System.OperationCanceledException)
                 {
-                    // Cancelled because user unlocked the session
+                    // Cancelled because displays powered off (state == 0) or user unlocked the session
                 }
                 catch (Exception ex)
                 {

@@ -4,6 +4,14 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.18] - 2026-10-12
+
+### Fixed
+- **External USB-C / 4K Monitor Wake & Recovery After "Lock & Screen Off"**:
+  - **Eliminated DDC/CI `0xD6 = 0x04` (Soft Power Off) Controller Lockups**: Removed post-lock DDC/CI `VCP 0xD6 = 0x04` (Hard/Soft Power Off) waves that caused external USB-C / DisplayPort monitors (such as 42-inch LG 4K displays) to shut down their internal scaler / USB-C PD controller or wedge mid-link teardown, previously requiring an AC mains power cycle to recover. External displays now transition cleanly into native hardware standby when Windows drops the video signal and wake automatically when video output resumes.
+  - **Immediate Lock Display Timeout Restoration on Screen Off**: Hooked `GUID_CONSOLE_DISPLAY_STATE` (`Off = 0`) to cancel remaining post-lock power-off waves and automatically restore `VIDEOCONLOCK` (`60s`) and `VIDEOIDLE` (`300s`/`180s`) 2 seconds after displays power down (with a 10-second fallback), rather than holding `1s` timeouts until `SessionUnlock`. This prevents Windows from cutting the USB-C DisplayPort video signal 1 second into a monitor's wake/link-training sequence while on the lock screen.
+  - **Self-Healing Workstation Lock State Synchronization**: Synchronized `_isWorkstationLocked` against `NativeMethods.IsWorkstationLocked()` on display wake, display change refreshes, and keep-awake heartbeats so Windows Automatic Restart Sign-On (ARSO) startups never leave the app stuck in locked state.
+
 ## [1.1.17] - 2026-10-11
 
 ### Fixed & Enhanced

@@ -1,7 +1,6 @@
-What's New in Luminark v1.1.17:
+What's New in Luminark v1.1.18:
 
-• Reliable "Lock & Screen Off" for Laptop & External Displays:
-  - Fixed Per-Thread Keep-Awake Leak: Ensured Win32 SetThreadExecutionState calls always execute on the main UI thread rather than background ThreadPool threads, preventing orphaned ES_DISPLAY_REQUIRED kernel holds from blocking display turn-off when locking with Prevent Sleep enabled.
-  - Persistent Lock Display Timeout: Removed the premature 5-second timeout reset that cancelled screen power-off while Windows 11 LogonUI and Windows Hello were still initializing. Both Console Lock (VIDEOCONLOCK) and Video Idle (VIDEOIDLE) timeouts now remain at 1s while locked and restore automatically upon unlock, exit, or startup.
-  - Multi-Wave External Monitor Standby: Sequenced DDC/CI power-off commands (both VCP 0xD6 0x02 Standby and 0x04 Off with physical handle re-acquisition) and desktop SC_MONITORPOWER broadcasts after LockWorkStation settles so lock screen rendering never wakes external monitors back up.
-  - Lock-Aware Device Change Filtering: Suppressed background WM_DEVICECHANGE / I2C monitor scans while the workstation is locked so sleeping monitors are never awakened by background PnP events.
+• Fixed External USB-C & 4K Monitor Wake After "Lock & Screen Off":
+  - Prevented Monitor Controller Lockups: Removed raw DDC/CI VCP 0xD6 (0x04 Soft Power Off) waves during lock that caused external USB-C / DisplayPort monitors (including 42" LG 4K displays) to turn off their internal scaler/USB-C controller and require unplugging from AC mains. External monitors now enter native DisplayPort/HDMI standby cleanly when Windows drops the video link and wake automatically when the laptop wakes.
+  - Full Lock-Screen Wake Timeout for USB-C Link Training: Automatically restores Console Lock (VIDEOCONLOCK) and Video Idle (VIDEOIDLE) timeouts to their normal values as soon as displays finish powering down on lock, ensuring slow-waking 4K/USB-C monitors have the full 60+ seconds to complete link training when waking on the lock screen.
+  - Self-Healing Lock State Detection: Automatically verifies OS session lock state on display wake and plug/unplug events so Windows Automatic Restart Sign-On (ARSO) startups never defer monitor detection.
