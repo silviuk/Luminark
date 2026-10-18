@@ -16,6 +16,7 @@ namespace Lumina
         private readonly MainViewModel _viewModel;
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayFlyoutWindow? _flyoutWindow;
+        private BrightnessOsdWindow? _osdWindow;
         private TrayScrollHook? _scrollHook;
         private HotkeyService? _hotkeyService;
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
@@ -135,9 +136,22 @@ namespace Lumina
                         {
                             _notifyIcon.Text = $"Luminark ({_viewModel.MasterBrightness}%) - Display & Theme Manager";
                         }
+                        if (_viewModel.EnableBrightnessOsd)
+                        {
+                            _osdWindow?.ShowBrightness(_viewModel.MasterBrightness);
+                        }
                         App.Log($"[MainWindow] Tray scroll -> MasterBrightness={_viewModel.MasterBrightness}%");
                     });
                 };
+
+                _osdWindow = new BrightnessOsdWindow();
+                _viewModel.BrightnessStepped += b => Dispatcher.Invoke(() =>
+                {
+                    if (_viewModel.EnableBrightnessOsd)
+                    {
+                        _osdWindow?.ShowBrightness(b);
+                    }
+                });
 
                 _flyoutWindow = new TrayFlyoutWindow(_viewModel, _scrollHook, () => ShowAndActivate());
 
@@ -560,16 +574,29 @@ namespace Lumina
                 System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) ||
                 System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin)) parts.Add("Win");
 
+            int virtualKey = System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
+
             if (parts.Count == 0)
             {
-                // Must have at least one modifier key
-                return;
+                // If no modifiers, allow dedicated special keys (VK_BRIGHTNESS_UP, VK_BRIGHTNESS_DOWN, F1-F24)
+                if (virtualKey != 0xD8 && virtualKey != 0xD9 &&
+                    !(virtualKey >= 0x70 && virtualKey <= 0x87))
+                {
+                    // Standard keys must have at least one modifier key
+                    return;
+                }
             }
 
-            string keyName = key.ToString();
-            if (key >= System.Windows.Input.Key.D0 && key <= System.Windows.Input.Key.D9)
+            string keyName;
+            if (virtualKey == 0xD8) keyName = "BrightnessUp";
+            else if (virtualKey == 0xD9) keyName = "BrightnessDown";
+            else
             {
-                keyName = keyName.Substring(1);
+                keyName = key.ToString();
+                if (key >= System.Windows.Input.Key.D0 && key <= System.Windows.Input.Key.D9)
+                {
+                    keyName = keyName.Substring(1);
+                }
             }
 
             parts.Add(keyName);
@@ -598,6 +625,16 @@ namespace Lumina
         private void OnClearLockShortcutClicked(object sender, RoutedEventArgs e)
         {
             _viewModel.LockAndTurnOffShortcut = "None";
+        }
+
+        private void OnClearBrightnessUpShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.BrightnessUpShortcut = "None";
+        }
+
+        private void OnClearBrightnessDownShortcutClicked(object sender, RoutedEventArgs e)
+        {
+            _viewModel.BrightnessDownShortcut = "None";
         }
 
         private void OnResetShortcutsClicked(object sender, RoutedEventArgs e)

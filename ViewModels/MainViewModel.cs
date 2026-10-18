@@ -43,6 +43,8 @@ namespace Lumina.ViewModels
             _nightLightService.StateChanged += OnNightLightStateChanged;
             _scheduleService.ScheduleTriggered += OnScheduleTriggered;
             _scheduleService.SetActiveMonitorsProvider(() => Monitors);
+            _monitorService.InternalBrightnessChanged += OnInternalBrightnessChanged;
+            _monitorService.StartWmiBrightnessWatcher();
 
             try
             {
@@ -1495,6 +1497,130 @@ namespace Lumina.ViewModels
             }
         }
 
+        public string BrightnessUpShortcut
+        {
+            get => _settings.BrightnessUpShortcut ?? "Ctrl+Alt+Up";
+            set
+            {
+                if (_settings.BrightnessUpShortcut != value)
+                {
+                    _settings.BrightnessUpShortcut = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public string BrightnessDownShortcut
+        {
+            get => _settings.BrightnessDownShortcut ?? "Ctrl+Alt+Down";
+            set
+            {
+                if (_settings.BrightnessDownShortcut != value)
+                {
+                    _settings.BrightnessDownShortcut = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                    ShortcutsConfigChanged?.Invoke();
+                }
+            }
+        }
+
+        public static IReadOnlyList<int> BrightnessStepOptions { get; } = new[] { 1, 2, 5, 10 };
+
+        public int BrightnessStep
+        {
+            get => _settings.BrightnessStep > 0 ? _settings.BrightnessStep : 5;
+            set
+            {
+                if (_settings.BrightnessStep != value)
+                {
+                    _settings.BrightnessStep = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public bool SyncLaptopBrightnessKeys
+        {
+            get => _settings.SyncLaptopBrightnessKeys;
+            set
+            {
+                if (_settings.SyncLaptopBrightnessKeys != value)
+                {
+                    _settings.SyncLaptopBrightnessKeys = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public bool EnableBrightnessOsd
+        {
+            get => _settings.EnableBrightnessOsd;
+            set
+            {
+                if (_settings.EnableBrightnessOsd != value)
+                {
+                    _settings.EnableBrightnessOsd = value;
+                    OnPropertyChanged();
+                    SaveSettings();
+                }
+            }
+        }
+
+        public event Action<uint>? BrightnessStepped;
+
+        public void StepMasterBrightness(bool increase)
+        {
+            int step = BrightnessStep;
+            long target = increase ? (long)_masterBrightness + step : (long)_masterBrightness - step;
+            uint newBrightness = (uint)Math.Clamp(target, 0, 100);
+            MasterBrightness = newBrightness;
+            App.Log($"[MainViewModel] Hotkey adjusted MasterBrightness: {newBrightness}% (step={(increase ? "+" : "-")}{step})");
+            BrightnessStepped?.Invoke(newBrightness);
+        }
+
+        private void OnInternalBrightnessChanged(object? sender, uint newBrightness)
+        {
+            if (!SyncLaptopBrightnessKeys) return;
+
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                App.Log($"[MainViewModel] Laptop hardware brightness event received: {newBrightness}%");
+
+                var internalMon = Monitors.FirstOrDefault(m => m.Type == MonitorType.WmiInternal);
+                if (internalMon != null)
+                {
+                    _isUpdatingIndividualBrightness = true;
+                    internalMon.CurrentBrightness = newBrightness;
+                    _isUpdatingIndividualBrightness = false;
+                }
+
+                if (IsMonitorsLinked)
+                {
+                    _masterBrightness = newBrightness;
+                    OnPropertyChanged(nameof(MasterBrightness));
+                    OnPropertyChanged(nameof(MasterBrightnessText));
+
+                    foreach (var mon in Monitors)
+                    {
+                        if (mon.Type == MonitorType.DdcCi && mon.IsActive)
+                        {
+                            _isUpdatingIndividualBrightness = true;
+                            mon.CurrentBrightness = newBrightness;
+                            _isUpdatingIndividualBrightness = false;
+                            _monitorService.SetBrightness(mon, newBrightness);
+                        }
+                    }
+                }
+
+                BrightnessStepped?.Invoke(newBrightness);
+            });
+        }
+
         public void ResetShortcutsToDefaults()
         {
             _settings.EnableGlobalShortcuts = true;
@@ -1502,11 +1628,21 @@ namespace Lumina.ViewModels
             _settings.LightModeShortcut = "Ctrl+Alt+L";
             _settings.ToggleThemeShortcut = "Ctrl+Alt+T";
             _settings.LockAndTurnOffShortcut = "Win+J";
+            _settings.BrightnessUpShortcut = "Ctrl+Alt+Up";
+            _settings.BrightnessDownShortcut = "Ctrl+Alt+Down";
+            _settings.BrightnessStep = 5;
+            _settings.SyncLaptopBrightnessKeys = true;
+            _settings.EnableBrightnessOsd = true;
             OnPropertyChanged(nameof(EnableGlobalShortcuts));
             OnPropertyChanged(nameof(DarkModeShortcut));
             OnPropertyChanged(nameof(LightModeShortcut));
             OnPropertyChanged(nameof(ToggleThemeShortcut));
             OnPropertyChanged(nameof(LockAndTurnOffShortcut));
+            OnPropertyChanged(nameof(BrightnessUpShortcut));
+            OnPropertyChanged(nameof(BrightnessDownShortcut));
+            OnPropertyChanged(nameof(BrightnessStep));
+            OnPropertyChanged(nameof(SyncLaptopBrightnessKeys));
+            OnPropertyChanged(nameof(EnableBrightnessOsd));
             OnPropertyChanged(nameof(LockAndTurnOffToolTip));
             SaveSettings();
             ShortcutsConfigChanged?.Invoke();
@@ -2149,6 +2285,7 @@ namespace Lumina.ViewModels
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+                _monitorService.InternalBrightnessChanged -= OnInternalBrightnessChanged;
                 try { _displayChangeCts?.Cancel(); _displayChangeCts?.Dispose(); } catch { }
                 try { _lockPowerOffCts?.Cancel(); _lockPowerOffCts?.Dispose(); } catch { }
                 StopPreventSleepTimer();

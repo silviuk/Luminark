@@ -4,6 +4,23 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.19] - 2026-10-18
+
+### Added & Enhanced
+- **Global Brightness Hotkeys for External Keyboards (Logitech MX Keys, etc.)**:
+  - Added configurable global shortcuts for **Increase Master Brightness** (default `Ctrl+Alt+Up`) and **Decrease Master Brightness** (default `Ctrl+Alt+Down`).
+  - Added configurable step size ($1\%$, $2\%$, $5\%$, $10\%$) in Settings to control how much brightness changes per keypress.
+  - Native support for consumer media / brightness virtual keys (`VK_BRIGHTNESS_UP` `0xD8` and `VK_BRIGHTNESS_DOWN` `0xD9`), function keys (`F1`–`F24`), and directional arrows.
+  - Omitted `MOD_NOREPEAT` on brightness hotkeys so holding down the key smoothly steps the master brightness across all linked monitors.
+- **Laptop Hardware Fn Brightness Key Synchronization**:
+  - Added real-time WMI event watcher listening to `root\wmi:WmiMonitorBrightnessEvent`.
+  - When pressing native laptop Fn brightness keys, Luminark captures the hardware brightness change and immediately mirrors it across all linked external (DDC/CI) monitors in real time.
+  - Includes a 1.2-second loop-prevention filter so Luminark's own WMI adjustments do not echo back.
+- **Modern Windows 11 On-Screen Display (OSD) Overlay**:
+  - Added a non-activating, lightweight, Fluent-styled on-screen display flyout (`BrightnessOsdWindow`) that floats above games and apps without stealing input focus.
+  - Displays dynamic sun/brightness icon, smooth progress bar, and percentage readout for 1.3s with fade-in/fade-out animations upon hotkey trigger or tray scroll.
+  - Can be toggled on or off in Settings.
+
 ## [1.1.18] - 2026-10-12
 
 ### Fixed

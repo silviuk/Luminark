@@ -12,6 +12,8 @@ namespace Lumina.Services
         public const int HOTKEY_ID_LIGHT = 9002;
         public const int HOTKEY_ID_TOGGLE = 9003;
         public const int HOTKEY_ID_LOCK_SCREEN = 9004;
+        public const int HOTKEY_ID_BRIGHTNESS_UP = 9005;
+        public const int HOTKEY_ID_BRIGHTNESS_DOWN = 9006;
 
         private IntPtr _hwnd;
         private readonly MainViewModel _viewModel;
@@ -41,6 +43,8 @@ namespace Lumina.Services
             RegisterSingle(HOTKEY_ID_LIGHT, _viewModel.LightModeShortcut, "Light Mode");
             RegisterSingle(HOTKEY_ID_TOGGLE, _viewModel.ToggleThemeShortcut, "Toggle Theme");
             RegisterSingle(HOTKEY_ID_LOCK_SCREEN, _viewModel.LockAndTurnOffShortcut, "Lock and Turn Off Screen");
+            RegisterSingle(HOTKEY_ID_BRIGHTNESS_UP, _viewModel.BrightnessUpShortcut, "Brightness Up");
+            RegisterSingle(HOTKEY_ID_BRIGHTNESS_DOWN, _viewModel.BrightnessDownShortcut, "Brightness Down");
         }
 
         private void RegisterSingle(int id, string? shortcut, string description)
@@ -52,8 +56,15 @@ namespace Lumina.Services
 
             if (TryParseShortcut(shortcut, out uint modifiers, out uint vk))
             {
-                // MOD_NOREPEAT (0x4000) prevents continuous repeated hotkey triggering when held down
-                bool success = NativeMethods.RegisterHotKey(_hwnd, id, modifiers | NativeMethods.MOD_NOREPEAT, vk);
+                // For discrete actions (theme toggle, lock), MOD_NOREPEAT (0x4000) prevents continuous repeats when held.
+                // For brightness adjustments, omit MOD_NOREPEAT so holding the key smoothly steps the brightness.
+                uint flags = modifiers;
+                if (id != HOTKEY_ID_BRIGHTNESS_UP && id != HOTKEY_ID_BRIGHTNESS_DOWN)
+                {
+                    flags |= NativeMethods.MOD_NOREPEAT;
+                }
+
+                bool success = NativeMethods.RegisterHotKey(_hwnd, id, flags, vk);
                 if (success)
                 {
                     _registeredIds.Add(id);
@@ -105,6 +116,16 @@ namespace Lumina.Services
                     App.Log("[HotkeyService] Hotkey triggered: Lock and Turn Off Screen");
                     _viewModel.StartLockAndTurnOff();
                     return true;
+
+                case HOTKEY_ID_BRIGHTNESS_UP:
+                    App.Log("[HotkeyService] Hotkey triggered: Brightness Up");
+                    _viewModel.StepMasterBrightness(true);
+                    return true;
+
+                case HOTKEY_ID_BRIGHTNESS_DOWN:
+                    App.Log("[HotkeyService] Hotkey triggered: Brightness Down");
+                    _viewModel.StepMasterBrightness(false);
+                    return true;
             }
 
             return false;
@@ -136,6 +157,42 @@ namespace Lumina.Services
             }
 
             if (string.IsNullOrEmpty(keyPart)) return false;
+
+            var lowerKey = keyPart.ToLowerInvariant();
+
+            // Special brightness / media keys
+            if (lowerKey is "brightnessup" or "brightness_up" or "brightnessplus")
+            {
+                vk = 0xD8; // VK_BRIGHTNESS_UP
+                return true;
+            }
+            if (lowerKey is "brightnessdown" or "brightness_down" or "brightnessminus")
+            {
+                vk = 0xD9; // VK_BRIGHTNESS_DOWN
+                return true;
+            }
+
+            // Directional arrow aliases
+            if (lowerKey is "up" or "arrowup" or "uparrow")
+            {
+                vk = 0x26; // VK_UP
+                return true;
+            }
+            if (lowerKey is "down" or "arrowdown" or "downarrow")
+            {
+                vk = 0x28; // VK_DOWN
+                return true;
+            }
+            if (lowerKey is "left" or "arrowleft" or "leftarrow")
+            {
+                vk = 0x25; // VK_LEFT
+                return true;
+            }
+            if (lowerKey is "right" or "arrowright" or "rightarrow")
+            {
+                vk = 0x27; // VK_RIGHT
+                return true;
+            }
 
             // Attempt to parse standard WPF Key
             if (Enum.TryParse<Key>(keyPart, true, out var key))

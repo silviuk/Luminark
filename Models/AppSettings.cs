@@ -34,6 +34,11 @@ namespace Lumina.Models
         public string LightModeShortcut { get; set; } = "Ctrl+Alt+L";
         public string ToggleThemeShortcut { get; set; } = "Ctrl+Alt+T";
         public string LockAndTurnOffShortcut { get; set; } = "Win+J";
+        public string BrightnessUpShortcut { get; set; } = "Ctrl+Alt+Up";
+        public string BrightnessDownShortcut { get; set; } = "Ctrl+Alt+Down";
+        public int BrightnessStep { get; set; } = 5; // 1, 2, 5, 10
+        public bool SyncLaptopBrightnessKeys { get; set; } = true;
+        public bool EnableBrightnessOsd { get; set; } = true;
 
         // Key: Monitor ID, Value: Dictionary of Input Code -> Custom Name
         public Dictionary<string, Dictionary<uint, string>> CustomInputNames { get; set; } = new();

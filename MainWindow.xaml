@@ -917,13 +917,132 @@
 
                                 <Separator Margin="0,12,0,12" />
 
+                                <!-- Increase Brightness Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Increase Master Brightness" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Increase linked brightness for all monitors (e.g. Ctrl+Alt+Up or Logitech MX Keys)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding BrightnessUpShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Ctrl+Alt+Up). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearBrightnessUpShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Decrease Brightness Shortcut -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Decrease Master Brightness" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Decrease linked brightness for all monitors (e.g. Ctrl+Alt+Down or Logitech MX Keys)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:TextBox Grid.Column="1"
+                                                Width="140"
+                                                Text="{Binding BrightnessDownShortcut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                PreviewKeyDown="OnShortcutTextBoxPreviewKeyDown"
+                                                ToolTip="Click and press a key combination (e.g. Ctrl+Alt+Down). Press Delete or Backspace to clear."
+                                                VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                FontWeight="SemiBold" />
+                                    <ui:Button Grid.Column="3"
+                                               Appearance="Secondary"
+                                               Padding="8,6"
+                                               Click="OnClearBrightnessDownShortcutClicked"
+                                               ToolTip="Clear shortcut"
+                                               VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </ui:Button>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Brightness Step Size -->
+                                <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Brightness Step Size" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Amount to increase or decrease brightness on each keypress" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding BrightnessStepOptions}"
+                                              SelectedItem="{Binding BrightnessStep, Mode=TwoWay}"
+                                              Width="140"
+                                              VerticalAlignment="Center">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding StringFormat='{}{0}%'}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Sync Laptop Hardware Fn Brightness Keys -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Sync Laptop Hardware Brightness Keys" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Automatically mirror built-in laptop Fn brightness changes to all linked external monitors" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding SyncLaptopBrightnessKeys, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
+                                <!-- Show Brightness OSD -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Show On-Screen Display (OSD)" FontWeight="Medium" FontSize="14" />
+                                        <TextBlock Text="Display a modern Windows 11 flyout overlay when brightness is changed via keys or tray scroll" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableBrightnessOsd, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Separator Margin="0,12,0,12" />
+
                                 <!-- Reset to Defaults -->
                                 <Grid IsEnabled="{Binding EnableGlobalShortcuts}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Reset all shortcuts to defaults (Ctrl+Alt+D, Ctrl+Alt+L, Ctrl+Alt+T, Win+J)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="0" Text="Reset all shortcuts to defaults (Ctrl+Alt+D, Ctrl+Alt+L, Ctrl+Alt+T, Win+J, Ctrl+Alt+Up, Ctrl+Alt+Down)" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <ui:Button Grid.Column="1"
                                                Appearance="Secondary"
                                                Padding="12,6"

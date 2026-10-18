@@ -828,10 +828,53 @@ namespace Lumina.Services
             return null;
         }
 
+        private ManagementEventWatcher? _brightnessWatcher;
+        private static DateTime _lastWmiSetTime = DateTime.MinValue;
+        public event EventHandler<uint>? InternalBrightnessChanged;
+
+        public void StartWmiBrightnessWatcher()
+        {
+            try
+            {
+                var scope = new ManagementScope(@"root\wmi");
+                scope.Connect();
+                var query = new WqlEventQuery("WmiMonitorBrightnessEvent");
+                _brightnessWatcher = new ManagementEventWatcher(scope, query);
+                _brightnessWatcher.EventArrived += (s, e) =>
+                {
+                    try
+                    {
+                        // Ignore events triggered by Luminark itself within 1.2 seconds
+                        if (DateTime.UtcNow - _lastWmiSetTime < TimeSpan.FromMilliseconds(1200))
+                        {
+                            return;
+                        }
+
+                        if (e.NewEvent != null && e.NewEvent["Brightness"] != null)
+                        {
+                            uint brightness = Convert.ToByte(e.NewEvent["Brightness"]);
+                            InternalBrightnessChanged?.Invoke(this, brightness);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Log($"[MonitorService] Error handling WmiMonitorBrightnessEvent: {ex.Message}");
+                    }
+                };
+                _brightnessWatcher.Start();
+                App.Log("[MonitorService] WMI brightness event watcher started for hardware Fn keys.");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[MonitorService] WMI brightness event watcher not available: {ex.Message}");
+            }
+        }
+
         private static void SetWmiBrightness(uint targetBrightness, string? targetInstance = null)
         {
             try
             {
+                _lastWmiSetTime = DateTime.UtcNow;
                 using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT * FROM WmiMonitorBrightnessMethods");
                 using var collection = searcher.Get();
 
@@ -867,6 +910,17 @@ namespace Lumina.Services
 
         public void Dispose()
         {
+            if (_brightnessWatcher != null)
+            {
+                try
+                {
+                    _brightnessWatcher.Stop();
+                    _brightnessWatcher.Dispose();
+                }
+                catch { }
+                _brightnessWatcher = null;
+            }
+
             lock (_lock)
             {
                 CleanupPhysicalMonitors();
