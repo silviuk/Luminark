@@ -165,6 +165,22 @@ begin
       Exit;
     end;
     if ResultCode = 3010 then NeedsRestart := True;
+    // An SDK or damaged installation can retain MSI registration after its
+    // runtime files disappear. Repair the same verified package in that case.
+    if not IsDotNet10DesktopInstalled then
+    begin
+      if not Exec(InstallerPath, '/repair /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Result := 'Failed to repair the Microsoft .NET 10 Desktop Runtime.';
+        Exit;
+      end;
+      if (ResultCode <> 0) and (ResultCode <> 3010) then
+      begin
+        Result := 'Microsoft .NET 10 Desktop Runtime repair failed (code: ' + IntToStr(ResultCode) + ').';
+        Exit;
+      end;
+      if ResultCode = 3010 then NeedsRestart := True;
+    end;
     if not IsDotNet10DesktopInstalled then
     begin
       Result := 'The required .NET 10 Desktop Runtime was not detected after installation.';

@@ -21,9 +21,21 @@ try {
     dotnet build-server shutdown
     $uninstall = Start-Process $runtimeSetup -ArgumentList '/uninstall /quiet /norestart' -WindowStyle Hidden -Wait -PassThru
     if ($uninstall.ExitCode -notin 0, 1605, 3010) { throw "Prerequisite removal failed: $($uninstall.ExitCode)" }
-    if (Test-Path -LiteralPath $runtimeDirectory) {
-        throw 'The SDK retained its desktop runtime. A genuinely missing prerequisite was not established; do not report this as a clean install pass.'
+    # Hosted SDK images can contain runtime files without a separately removable
+    # bundle. Isolate only compatible desktop runtime directories on this disposable
+    # runner so the bootstrapper must supply an actually missing framework.
+    $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'dotnet/shared/Microsoft.WindowsDesktop.App'))
+    foreach ($directory in @(Get-ChildItem -LiteralPath $runtimeRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^10\.0\.\d+$' -and [version]$_.Name -ge [version]$runtime.version })) {
+        $source = [IO.Path]::GetFullPath($directory.FullName)
+        $destination = [IO.Path]::GetFullPath((Join-Path $work ('original-runtime-' + $directory.Name)))
+        if ([IO.Path]::GetDirectoryName($source) -cne $runtimeRoot -or
+            -not $destination.StartsWith($work + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Runtime fixture path escaped the explicit test directories.'
+        }
+        Move-Item -LiteralPath $source -Destination $destination
     }
+    if (Test-Path -LiteralPath $runtimeDirectory) { throw 'The missing runtime precondition was not established.' }
     $installLog = Join-Path $work 'install.log'
     $install = Start-Process (Resolve-Path -LiteralPath $Installer).Path -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=',
@@ -41,7 +53,7 @@ try {
         (Get-Content -LiteralPath $log -Raw) -notmatch 'Application_Startup completed successfully') {
         throw 'Installed application did not confirm successful startup.'
     }
-    Write-Host 'PASS: missing desktop runtime, verified bootstrapper install, application install and startup'
+    Write-Host 'PASS: missing desktop runtime files, verified bootstrapper install/repair, application install and startup'
 } finally {
     if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force }
     if (Test-Path -LiteralPath $work) {
