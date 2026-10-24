@@ -15,6 +15,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        Lumina.App.SuppressLogging = true; // Fixtures must never write to the user's application log.
         try
         {
             if (args.Contains("--hardware-smoke"))

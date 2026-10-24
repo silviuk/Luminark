@@ -25,8 +25,15 @@ namespace Lumina
         private EventWaitHandle? _activateEvent;
 
         private static readonly Lazy<AsyncFileLogger> Logger = new(() => new AsyncFileLogger(LogPath));
-        public static void Log(string message) => Logger.Value.Write(message);
-        public static void LogDebug(string message) => Logger.Value.Write(message, debug: true);
+        internal static bool SuppressLogging { get; set; }
+        public static void Log(string message)
+        {
+            if (!SuppressLogging) Logger.Value.Write(message);
+        }
+        public static void LogDebug(string message)
+        {
+            if (!SuppressLogging) Logger.Value.Write(message, debug: true);
+        }
         public static readonly int WM_SHOWLUMINARK = NativeMethods.RegisterWindowMessage("LUMINARK_ACTIVATE_WINDOW_MSG");
 
         private void Application_Startup(object sender, StartupEventArgs e)

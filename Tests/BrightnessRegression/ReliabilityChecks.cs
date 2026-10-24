@@ -127,7 +127,7 @@ internal static class ReliabilityChecks
 
     private static void CheckRegistryWatcher()
     {
-        string path = @"Software\Luminark.Tests\" + Guid.NewGuid().ToString("N");
+        string path = @"Software\Luminark-test-" + Guid.NewGuid().ToString("N");
         using var key = Registry.CurrentUser.CreateSubKey(path);
         try
         {
