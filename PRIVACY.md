@@ -1,25 +1,34 @@
-### Privacy Policy
+# Luminark Privacy Policy
 
-Last updated: September 22, 2026 
+Last updated: October 24, 2026
 
-Your privacy is critically important to us. **Luminark** is designed to operate with a zero-data collection model. 
+This policy applies to Luminark, the Windows display and theme utility published by Silviu Vlasceanu at https://github.com/silviuk/Luminark, including version 1.1.0 and subsequent releases.
 
-### 1. Information We Do Not Collect
+## Information used on your device
 
-We do not collect, store, share, or transmit any personal data or private information whatsoever. This includes, but is not limited to: 
+Luminark processes information locally to provide the features you enable:
 
-* **Personal Identifiers:** Names, email addresses, usernames, phone numbers, or physical addresses.
-* **Device & Usage Data:** IP addresses, browser histories, device identifiers, or tracking cookies.
-* **Location Data:** GPS coordinates or network-based location information.
+- Display information, including monitor descriptions, hardware-stable display identifiers and supported controls, is read through Windows display APIs, WMI and DDC/CI. Custom monitor names are saved against these identifiers so that names remain associated with the same monitor after reconnecting or restarting. Later releases also save custom input names, visible input choices and known monitor identifiers.
+- Preferences include theme and brightness schedules, day/night times and brightness levels, Night Light synchronization, monitor linking, keyboard shortcuts, startup and tray behavior, input-switch and lock-screen delays, and sleep-prevention options and durations. These settings are used to remember and apply your choices.
+- Windows theme, Night Light state and schedule information, display changes, and power and session events are read to coordinate theme, brightness and sleep behavior. Sunrise and sunset times supplied by Windows Night Light may be used; Luminark does not request GPS coordinates or directly access Windows location services.
+- Diagnostic logs record timestamps, application events and errors. Depending on the release and event, they can include monitor names or identifiers, capabilities, brightness or input values, shortcut settings, and file paths or exception details. These logs support troubleshooting and are not automatically uploaded.
 
-### 2. No Data Processing or Sharing
+## Storage, retention and control
 
-Because we do not gather any data, we do not process, sell, trade, or rent any personal information to third parties. There are no advertising trackers, analytics packages, or third-party SDKs integrated into Luminark that monitor your behavior. 
+Settings are stored as readable JSON in `%LOCALAPPDATA%\Luminark\settings.json`. Diagnostic logs are written to `%LOCALAPPDATA%\Luminark\luminark.log`; releases with log rotation may also retain `luminark.log.old`. Windows may redirect application data for packaged installations. These files are not encrypted by Luminark and are subject to your Windows account's file permissions.
 
-### 3. Changes to This Privacy Policy
+You can change preferences in Luminark. To remove saved preferences and logs, exit Luminark from its tray menu and delete those files from its application-data folder. Deleting `settings.json` resets saved preferences and monitor names; running Luminark again recreates settings and logs as needed. Version 1.1.0 appends to its log without automatic rotation. Local files can remain after uninstalling, so remove them separately if needed.
 
-We may update our Privacy Policy from time to time. Since we do not collect email addresses, we cannot notify users individually. Any changes will be made available by updating the "Last updated" date at the top of this policy page on our official repository. 
+Enabling Start with Windows also creates a Windows startup registration (a current-user Run registry entry for unpackaged installations, or a Windows startup task for packaged installations). Disable this option in Luminark or Windows Startup Apps to stop automatic launch.
 
-### 4. Contact Us
+## Transmission and sharing
 
-If you have any questions or suggestions about this Privacy Policy, please feel free to open an issue or reach out via our [GitHub Repository](https://github.com/Luminark).
+Luminark does not send your settings, monitor identifiers or diagnostic logs to the developer, and does not use advertising, behavioral analytics or telemetry services. The developer does not sell or rent this local information. No Luminark account is required.
+
+Downloading Luminark, installing a required Microsoft .NET runtime, visiting repository links, or using Microsoft Store or Windows Package Manager involves the relevant third-party services and their own privacy policies. Those services may receive normal connection information, such as an IP address, independently of Luminark's local settings.
+
+If you choose to submit an issue or attach a log on GitHub, the information you submit is shared with GitHub and, for public issues, is publicly visible. Review logs before sharing and remove monitor names, identifiers, local paths or other details you do not want to publish.
+
+## Changes and contact
+
+Updates to this policy will be published at this location with a revised date. For questions about Luminark's privacy practices, contact the maintainer through https://github.com/silviuk/Luminark/issues. Do not include private information in a public issue.
