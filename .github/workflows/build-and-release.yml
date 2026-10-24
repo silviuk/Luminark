@@ -47,14 +47,7 @@ jobs:
 
       - name: Install Inno Setup
         run: |
-          $tool = (Get-Content Tools/ReleaseTools.json -Raw | ConvertFrom-Json).innosetup
-          $setup = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
-          Invoke-WebRequest $tool.url -OutFile $setup
-          if ((Get-FileHash $setup -Algorithm SHA256).Hash -ine $tool.sha256) { throw 'Inno Setup SHA256 mismatch.' }
-          $compiler = Join-Path $env:RUNNER_TEMP 'InnoSetup'
-          $install = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',"/DIR=$compiler") -WindowStyle Hidden -Wait -PassThru
-          if ($install.ExitCode -ne 0) { throw 'Inno Setup installation failed.' }
-          "INNO_COMPILER=$compiler/ISCC.exe" >> $env:GITHUB_ENV
+          ./Tools/Install-InnoSetup.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'InnoSetup')
 
       - name: Import release signing certificate
         shell: pwsh

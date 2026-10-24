@@ -29,3 +29,13 @@ jobs:
       - name: Audit dependencies
         shell: pwsh
         run: ./Tools/Audit-Dependencies.ps1
+      - name: Install verified packaging tool
+        shell: pwsh
+        run: ./Tools/Install-InnoSetup.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'InnoSetup')
+      - name: Compile installer without publishing
+        shell: pwsh
+        run: |
+          dotnet publish Luminark.csproj -c Release -r win-x64 --self-contained false -o publish --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent publication failed.' }
+          & $env:INNO_COMPILER /Qp installer/Luminark.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
