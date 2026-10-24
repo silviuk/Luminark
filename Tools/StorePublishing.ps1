@@ -17,7 +17,14 @@ function Get-LuminarkPackageIdentity {
         if ($manifest.Package.Applications.Application.Executable -ne 'Luminark.exe') {
             throw 'MSIX does not launch Luminark.exe.'
         }
-        return $identity
+        # XML elements are enumerable in PowerShell; return stable metadata rather
+        # than allowing an empty Identity element to disappear from the pipeline.
+        return [pscustomobject]@{
+            Name = [string]$identity.Name
+            Publisher = [string]$identity.Publisher
+            Version = [string]$identity.Version
+            ProcessorArchitecture = [string]$identity.ProcessorArchitecture
+        }
     } finally { $zip.Dispose() }
 }
 
