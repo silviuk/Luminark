@@ -251,7 +251,7 @@ jobs:
             }
             $action = Get-LuminarkSubmissionAction -Status $statusObj.status
             if ($action -eq 'Verify') {
-              Assert-LuminarkSubmission -Submission $candidate -Version $env:VERSION
+              Assert-LuminarkSubmission -Submission $candidate -Version $env:VERSION -AllowPendingUpload:($statusObj.status -eq 'CommitStarted')
               Write-Host "Verified existing submission for $env:VERSION; status: $($statusObj.status). Publication may still be pending."
               "store_status=Verified existing $env:VERSION submission $candidateSubId (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
               exit 0
@@ -410,8 +410,11 @@ jobs:
             throw "Submission $subId failed: $finalStatus. Details: $($statusObj.statusDetails | ConvertTo-Json -Depth 10 -Compress)"
           }
           $verifiedSub = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
-          Assert-LuminarkSubmission -Submission $verifiedSub -Version $env:VERSION
-          Write-Host "Verified submitted package $env:VERSION.0 x64, category UtilitiesAndTools, immediate publication."
+          Assert-LuminarkSubmission -Submission $verifiedSub -Version $env:VERSION -AllowPendingUpload:($finalStatus -eq 'CommitStarted')
+          foreach ($pkg in $verifiedSub.applicationPackages) {
+            Write-Host "Submitted package: $($pkg.fileName), version: $($pkg.version), status: $($pkg.fileStatus)"
+          }
+          Write-Host "Verified submission for $env:VERSION.0 x64, category UtilitiesAndTools, immediate publication."
           Write-Host "Submission $subId status: $finalStatus. Only Published means the update is live."
           "store_status=Verified $env:VERSION submission $subId (Status: $finalStatus; publication/certification may still be pending)" >> $env:GITHUB_OUTPUT
 

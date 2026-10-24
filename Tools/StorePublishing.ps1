@@ -22,11 +22,20 @@ function Get-LuminarkPackageIdentity {
 }
 
 function Assert-LuminarkSubmission {
-    param([Parameter(Mandatory)]$Submission, [Parameter(Mandatory)][string]$Version)
+    param([Parameter(Mandatory)]$Submission, [Parameter(Mandatory)][string]$Version, [switch]$AllowPendingUpload)
     $packages = @($Submission.applicationPackages | Where-Object { $_.fileStatus -ne 'PendingDelete' })
-    if ($packages.Count -ne 1 -or $packages[0].version -ne "$Version.0" -or
-        $packages[0].architecture -ne 'x64') {
-        throw "Submission $($Submission.id) does not contain exactly Luminark $Version.0 x64."
+    $parsed = $packages.Count -eq 1 -and $packages[0].version -eq "$Version.0" -and $packages[0].architecture -eq 'x64'
+    # Partner Center keeps PendingUpload with no parsed version during CommitStarted.
+    # The uploaded bytes were already checked locally; require the exact asset name here.
+    $pending = $AllowPendingUpload -and $packages.Count -eq 1 -and
+        $packages[0].fileStatus -eq 'PendingUpload' -and -not $packages[0].version -and
+        $packages[0].fileName -ceq "Luminark-$Version.0-x64.msix"
+    if (-not ($parsed -or $pending)) {
+        $details = $packages | Select-Object fileName, version, architecture, fileStatus | ConvertTo-Json -Compress
+        throw "Submission $($Submission.id) does not contain exactly Luminark $Version.0 x64. Packages: $details"
+    }
+    if ($pending) {
+        Write-Host 'Upload accepted; Partner Center has not parsed the package version yet. This is not a published release.'
     }
     if ($Submission.applicationCategory -ne 'UtilitiesAndTools') {
         throw "Submission category is '$($Submission.applicationCategory)', expected UtilitiesAndTools."

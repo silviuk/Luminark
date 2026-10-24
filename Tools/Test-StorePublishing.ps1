@@ -36,6 +36,12 @@ foreach ($status in 'None','PendingCommit','CommitFailed','PreProcessingFailed',
 }
 Must-Throw { Get-LuminarkSubmissionAction 'UnexpectedStatus' } 'unknown submission status rejected'
 Write-Host 'PASS: submission lifecycle cases'
+$sub = Submission
+$sub.applicationPackages = @([pscustomobject]@{fileName='Luminark-1.1.19.0-x64.msix'; version=''; architecture=''; fileStatus='PendingUpload'})
+Must-Throw { Assert-LuminarkSubmission -Submission $sub -Version '1.1.19' } 'unparsed package requires explicit pending mode'
+Assert-LuminarkSubmission -Submission $sub -Version '1.1.19' -AllowPendingUpload
+$sub.applicationPackages[0].fileName = 'Luminark-1.1.18.0-x64.msix'
+Must-Throw { Assert-LuminarkSubmission -Submission $sub -Version '1.1.19' -AllowPendingUpload } 'pending older upload cannot satisfy newer release'
 
 # Validate the package contents, not its filename.
 Add-Type -AssemblyName System.IO.Compression.FileSystem
