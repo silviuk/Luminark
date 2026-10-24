@@ -123,6 +123,9 @@ var
   DownloadUrl: String;
   QuotedPath: String;
   VerifyCommand: String;
+  SignatureLogPath: String;
+  QuotedLogPath: String;
+  SignatureDiagnostic: AnsiString;
 begin
   Result := '';
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Luminark.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -143,11 +146,23 @@ begin
 
     QuotedPath := InstallerPath;
     StringChangeEx(QuotedPath, #39, #39 + #39, True);
-    VerifyCommand := 'try { $s=Get-AuthenticodeSignature -LiteralPath ' + #39 + QuotedPath + #39 +
+    SignatureLogPath := ExpandConstant('{tmp}\runtime-publisher.txt');
+    QuotedLogPath := SignatureLogPath;
+    StringChangeEx(QuotedLogPath, #39, #39 + #39, True);
+    VerifyCommand := '$ErrorActionPreference=' + #39 + 'Stop' + #39 + '; try { ' +
+      'Import-Module ($PSHOME + ' + #39 + '\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' + #39 + ') -Force; ' +
+      '$s=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath ' + #39 + QuotedPath + #39 +
+      '; [IO.File]::WriteAllText(' + #39 + QuotedLogPath + #39 + ', [string]$s.Status + ' + #39 + ' ' + #39 + ' + $s.SignerCertificate.Subject)' +
       '; if ($s.Status -ne ' + #39 + 'Valid' + #39 + ' -or $s.SignerCertificate.Subject -notmatch ' + #39 +
-      'O=Microsoft Corporation' + #39 + ') { exit 1 } } catch { exit 1 }';
+      'O=Microsoft Corporation' + #39 + ') { exit 1 } } catch { [IO.File]::WriteAllText(' + #39 + QuotedLogPath + #39 + ', [string]$_); exit 1 }';
     if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-      '-NoProfile -NonInteractive -Command "' + VerifyCommand + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      '-NoProfile -NonInteractive -Command "' + VerifyCommand + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      Result := 'The runtime publisher verification process could not be started.';
+      Exit;
+    end;
+    if LoadStringFromFile(SignatureLogPath, SignatureDiagnostic) then Log('Runtime publisher: ' + String(SignatureDiagnostic));
+    if ResultCode <> 0 then
     begin
       Result := 'The runtime publisher signature could not be verified. Installation was stopped.';
       Exit;
