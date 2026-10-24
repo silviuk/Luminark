@@ -171,7 +171,9 @@ namespace Lumina
                 else
                 {
                     new System.Windows.Interop.WindowInteropHelper(mainWindow).EnsureHandle();
-                    mainWindow.WindowState = WindowState.Minimized;
+                    // Hidden tray startup does not need a minimized render target.
+                    // Creating one before the first render can leave stale client pixels
+                    // when the window is later restored on newer WPF runtimes.
                     mainWindow.Hide();
                 }
 

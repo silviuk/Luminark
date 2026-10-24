@@ -10,6 +10,11 @@ on:
         description: 'Release Tag to build and attach assets to (e.g. v1.1.6)'
         required: false
         default: 'v1.1.6'
+      sign_release:
+        description: 'Require trusted publisher signing (configured certificate required)'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -17,6 +22,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      SIGN_RELEASE: ${{ inputs.sign_release || vars.CODESIGN_REQUIRED == 'true' }}
 
     steps:
       - name: Checkout repository
@@ -50,6 +57,7 @@ jobs:
           ./Tools/Install-InnoSetup.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'InnoSetup')
 
       - name: Import release signing certificate
+        if: env.SIGN_RELEASE == 'true'
         shell: pwsh
         env:
           CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
@@ -72,7 +80,9 @@ jobs:
       - name: Publish Lumina (Framework-Dependent for Inno Setup)
         run: |
           dotnet publish -c Release -r win-x64 --self-contained false -o publish
-          ./Tools/Sign-Artifacts.ps1 -Path publish/Luminark.exe,publish/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path publish/Luminark.exe,publish/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
           New-Item -ItemType Directory -Force -Path installer/publish
           Copy-Item -Recurse -Force publish/* installer/publish/
 
@@ -80,12 +90,16 @@ jobs:
         run: |
           & $env:INNO_COMPILER installer/Luminark.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-          ./Tools/Sign-Artifacts.ps1 -Path (Get-ChildItem installer/Output/Luminark-Setup-*.exe).FullName -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path (Get-ChildItem installer/Output/Luminark-Setup-*.exe).FullName -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
 
       - name: Publish Lumina (Self-Contained for MSIX / Windows Store)
         run: |
           dotnet publish -c Release -r win-x64 --self-contained true -o publish-selfcontained
-          ./Tools/Sign-Artifacts.ps1 -Path publish-selfcontained/Luminark.exe,publish-selfcontained/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path publish-selfcontained/Luminark.exe,publish-selfcontained/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
 
       - name: Build MSIX Package
         shell: pwsh
@@ -144,6 +158,9 @@ jobs:
           }
 
           if ($notes) {
+            if ($env:SIGN_RELEASE -ne 'true') {
+              $notes += "`n`nThe Windows installer is unsigned in this release. Trusted publisher signing is deferred until a signing certificate or service is configured."
+            }
             Set-Content -Path "release_notes.md" -Value $notes -Encoding utf8
             "has_notes=true" >> $env:GITHUB_OUTPUT
           } else {

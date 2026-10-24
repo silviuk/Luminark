@@ -16,7 +16,7 @@ on:
       publish_store:
         description: 'Publish update to Windows Store (Microsoft Partner Center)'
         required: true
-        default: true
+        default: false
         type: boolean
 
 permissions:

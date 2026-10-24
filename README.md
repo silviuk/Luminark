@@ -135,7 +135,7 @@ Luminark includes a dedicated GitHub Action workflow (`.github/workflows/publish
 3. Click **"Run workflow"**:
    - **Release Tag**: Required exact tag (for example `v1.1.19`). Wait for Build and Release to finish before publishing.
    - **Publish to WinGet**: Checkbox (default: disabled; explicit opt-in while the initial submission awaits moderation).
-   - **Publish to Windows Store**: Checkbox (default: enabled).
+   - **Publish to Windows Store**: Checkbox (default: disabled; explicit authorization is required).
 4. Click **"Run workflow"**.
 
 The workflow verifies the release asset SHA256 digests and the embedded MSIX identity/version before contacting Partner Center. Release notes come from the selected tag. Publication is serialized; an existing committed submission is only accepted after its package version, architecture, category and delivery settings are verified. A different active submission blocks publication instead of reporting false success.
@@ -183,11 +183,12 @@ Compare old and new builds under the same conditions, using private bytes, CPU, 
 and handle counts. Repeat show/hide and reconnect cycles; do not infer heap savings from a
 small working set. UI latency and actual panel latency should be assessed separately.
 
-Release builds now require `CODESIGN_PFX_BASE64` and `CODESIGN_PFX_PASSWORD` GitHub secrets
+Trusted signing uses `CODESIGN_PFX_BASE64` and `CODESIGN_PFX_PASSWORD` GitHub secrets
 for a trusted Windows code-signing certificate. These are not configured automatically.
 The workflow signs the application and installer, verifies the signer and RFC3161 timestamp,
-and removes the imported certificate. Without signing credentials, a release stops before
-publishing. Configure a signing service instead if your certificate requires remote signing;
+and removes the imported certificate. Set the `sign_release` workflow input or repository
+variable `CODESIGN_REQUIRED=true` to require signing. When enabled, missing credentials stop
+publication. While signing enrollment is deferred, unsigned releases are explicitly labeled. Configure a signing service instead if your certificate requires remote signing;
 never export an HSM-backed key to create a PFX.
 
 The runtime bootstrapper pins an official Microsoft URL and SHA256 and checks the publisher
@@ -195,4 +196,5 @@ before execution. Update it with `./Tools/Update-Runtime.ps1 -Version 10.0.<patc
 the update command verifies the download against Microsoft's SHA512 metadata and signature.
 Review and commit the changed runtime constants, SDK version, and dependency locks together.
 Third-party actions and release tools are pinned; Dependabot proposes action and NuGet updates.
-WinGet publication remains an explicit opt-in and existing historical manifests are unchanged.
+Store and WinGet publication remain explicit opt-ins and existing historical manifests are unchanged.
+Actual-display acceptance can be run explicitly with `dotnet run --project Tests/BrightnessRegression -c Release -- --hardware-smoke` while unlocked. It performs a small brightness burst, validates readback, repeats handle recovery 100 times, and restores brightness. CI also exercises missing runtime files, installer bootstrapper install/repair, and application startup on a disposable hosted runner.

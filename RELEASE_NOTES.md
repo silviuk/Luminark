@@ -8,3 +8,7 @@ What's New in Luminark v1.1.21:
 - Removed forced memory trimming and moved logging off input/UI paths.
 - Batched rapid tray scroll input and repaired the runtime download/verification path.
 - Added dependency locking, pinned release tools, security checks, and regression coverage.
+- Fixed first activation from tray leaving stale window content on .NET 10.
+- Validated actual display brightness readback and 100 monitor-handle recovery cycles.
+
+The GitHub installer is unsigned while trusted signing enrollment is deferred. Store and WinGet publication are paused.

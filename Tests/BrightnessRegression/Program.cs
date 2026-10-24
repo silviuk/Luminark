@@ -17,7 +17,18 @@ internal static class Program
     {
         try
         {
-            if (args.Contains("--hardware-smoke")) HardwareChecks.Run();
+            if (args.Contains("--hardware-smoke"))
+            {
+                uint? restore = null;
+                int option = Array.IndexOf(args, "--restore-brightness");
+                if (option >= 0)
+                {
+                    if (option + 1 >= args.Length || !uint.TryParse(args[option + 1], out uint value) || value > 100)
+                        throw new ArgumentException("Expected a restore brightness between 0 and 100.");
+                    restore = value;
+                }
+                HardwareChecks.Run(restore);
+            }
             else Run();
         }
         catch (Exception ex)

@@ -451,12 +451,13 @@ namespace Lumina
         public void ShowAndActivate()
         {
             App.Log("[MainWindow] ShowAndActivate called");
-            Show();
-            Visibility = Visibility.Visible;
             if (WindowState == WindowState.Minimized)
             {
                 WindowState = WindowState.Normal;
             }
+            Show();
+            Visibility = Visibility.Visible;
+            InvalidateVisual();
             Activate();
             Topmost = true;
             Topmost = false;
