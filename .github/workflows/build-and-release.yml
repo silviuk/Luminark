@@ -10,6 +10,11 @@ on:
         description: 'Release Tag to build and attach assets to (e.g. v1.1.6)'
         required: false
         default: 'v1.1.6'
+      sign_release:
+        description: 'Require trusted publisher signing (configured certificate required)'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -17,10 +22,12 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      SIGN_RELEASE: ${{ inputs.sign_release || vars.CODESIGN_REQUIRED == 'true' }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_tag || github.ref }}
 
@@ -41,33 +48,58 @@ jobs:
           }
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.402
 
       - name: Install Inno Setup
         run: |
-          choco install innosetup --no-progress
+          ./Tools/Install-InnoSetup.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'InnoSetup')
+
+      - name: Import release signing certificate
+        if: env.SIGN_RELEASE == 'true'
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: ./Tools/Import-SigningCertificate.ps1
 
       - name: Restore dependencies
-        run: dotnet restore -r win-x64
+        run: dotnet restore -r win-x64 --locked-mode
 
       - name: Test brightness event regression
         run: dotnet run --project Tests/BrightnessRegression -c Release
 
+      - name: Verify publishing inputs
+        shell: pwsh
+        run: |
+          ./Tools/Test-StorePublishing.ps1
+          ./Tools/Test-ReleaseInputs.ps1
+          ./Tools/Audit-Dependencies.ps1
+
       - name: Publish Lumina (Framework-Dependent for Inno Setup)
         run: |
           dotnet publish -c Release -r win-x64 --self-contained false -o publish
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path publish/Luminark.exe,publish/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
           New-Item -ItemType Directory -Force -Path installer/publish
           Copy-Item -Recurse -Force publish/* installer/publish/
 
       - name: Compile Inno Setup Installer
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Luminark.iss
+          & $env:INNO_COMPILER installer/Luminark.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path (Get-ChildItem installer/Output/Luminark-Setup-*.exe).FullName -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
 
       - name: Publish Lumina (Self-Contained for MSIX / Windows Store)
         run: |
           dotnet publish -c Release -r win-x64 --self-contained true -o publish-selfcontained
+          if ($env:SIGN_RELEASE -eq 'true') {
+            ./Tools/Sign-Artifacts.ps1 -Path publish-selfcontained/Luminark.exe,publish-selfcontained/Luminark.dll -CertificateThumbprint $env:CODESIGN_THUMBPRINT
+          }
 
       - name: Build MSIX Package
         shell: pwsh
@@ -126,6 +158,9 @@ jobs:
           }
 
           if ($notes) {
+            if ($env:SIGN_RELEASE -ne 'true') {
+              $notes += "`n`nThe Windows installer is unsigned in this release. Trusted publisher signing is deferred until a signing certificate or service is configured."
+            }
             Set-Content -Path "release_notes.md" -Value $notes -Encoding utf8
             "has_notes=true" >> $env:GITHUB_OUTPUT
           } else {
@@ -133,7 +168,7 @@ jobs:
           }
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,3 +182,11 @@ jobs:
             installer/Output/Luminark-*.msix
           draft: false
           prerelease: false
+
+      - name: Remove imported signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:CODESIGN_THUMBPRINT) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:CODESIGN_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }

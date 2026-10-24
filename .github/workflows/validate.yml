@@ -1,0 +1,47 @@
+name: Validate
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore locked dependencies
+        run: dotnet restore Tests/BrightnessRegression --locked-mode
+      - name: Build and test reliability
+        run: dotnet run --project Tests/BrightnessRegression -c Release --no-restore
+      - name: Test release safeguards
+        shell: pwsh
+        run: |
+          ./Tools/Test-StorePublishing.ps1
+          ./Tools/Test-ReleaseInputs.ps1
+      - name: Audit dependencies
+        shell: pwsh
+        run: ./Tools/Audit-Dependencies.ps1
+      - name: Install verified packaging tool
+        shell: pwsh
+        run: ./Tools/Install-InnoSetup.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'InnoSetup')
+      - name: Compile installer without publishing
+        shell: pwsh
+        run: |
+          dotnet publish Luminark.csproj -c Release -r win-x64 --self-contained false -o publish --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent publication failed.' }
+          & $env:INNO_COMPILER /Qp installer/Luminark.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+      - name: Test missing-runtime installation on disposable runner
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem installer/Output/Luminark-Setup-*.exe)
+          if ($installers.Count -ne 1) { throw 'Expected one installer for acceptance testing.' }
+          ./Tools/Test-InstallerAcceptance.ps1 -Installer $installers[0].FullName

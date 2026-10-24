@@ -1071,7 +1071,7 @@
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding AppVersionText}" FontSize="15" FontWeight="SemiBold" />
-                                    <TextBlock Text="Native Windows 11 application built with .NET 8, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                    <TextBlock Text="Native Windows 11 application built with .NET 10, WPF-UI, DXVA2 DDC/CI hardware control, and Windows theme personalization APIs." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
 
                                 <ui:Button Grid.Column="2"

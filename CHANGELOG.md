@@ -4,6 +4,26 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.21] - 2026-10-24
+
+### Fixed
+- Keep registry watcher keys open until notifications complete; cancel and join watcher threads on shutdown.
+- Share current settings between the scheduler and UI, validate deserialized configuration, and save atomically with a recovery backup.
+- Bound and serialize brightness/volume commands, prevent stale monitor scans from undoing newer input, and safely own/release native monitor handles.
+- Drain hardware work before cleanup, stop input/OSD timers, and make service disposal idempotent.
+- Fix stale client pixels when first restoring the tray-started window on .NET 10.
+- Repair the runtime bootstrapper's checksum argument and validate the Microsoft publisher before runtime installation.
+
+### Performance
+- Remove forced GC/finalizer waits/working-set eviction from startup, show/hide, and periodic idle paths.
+- Use bounded background logging and coalesced tray-scroll delivery.
+- Add read-only performance sampling and regression tests for idle notifications, scheduling, persistence, shutdown, and bounded queues.
+
+### Security and Maintenance
+- Migrate to .NET 10 LTS and current System.Management; pin SDK, NuGet dependencies, workflow actions, runtime downloads, and release tooling.
+- Support optional trusted publisher signing with fail-closed certificate and timestamp verification when enabled. This release is unsigned while signing enrollment is deferred.
+- Add dependency audits and Dependabot updates. Keep Store and WinGet publication disabled by default pending explicit approval.
+
 ## [1.1.20] - 2026-10-24
 
 ### Fixed

@@ -26,7 +26,6 @@ namespace Lumina
                 {
                     Hide();
                     _viewModel.CancelLockCountdown();
-                    MainWindow.TrimMemory();
                 }
             };
 
@@ -58,7 +57,6 @@ namespace Lumina
                     }
                     Hide();
                     _viewModel.CancelLockCountdown();
-                    MainWindow.TrimMemory();
                     e.Handled = true;
                 }
             };
@@ -124,7 +122,6 @@ namespace Lumina
             {
                 Hide();
                 _viewModel.CancelLockCountdown();
-                MainWindow.TrimMemory();
             }
             else
             {

@@ -22,6 +22,7 @@ namespace Lumina
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
         private System.Drawing.Point _lastClickPos;
         private bool _isExplicitExit = false;
+        private bool _cleanupStarted;
         private bool _isSysCommandClose = false;
 
         private const int WM_CLOSE = 0x0010;
@@ -83,23 +84,6 @@ namespace Lumina
                 Activate();
             };
 
-            StateChanged += (s, e) =>
-            {
-                if (WindowState == WindowState.Minimized)
-                {
-                    TrimMemory();
-                }
-            };
-
-            ContentRendered += (s, e) => App.Log($"[MainWindow] ContentRendered -> IsVisible={IsVisible}");
-            IsVisibleChanged += (s, e) =>
-            {
-                App.Log($"[MainWindow] IsVisibleChanged -> {IsVisible}");
-                if (!IsVisible)
-                {
-                    TrimMemory();
-                }
-            };
         }
 
         private Icon? _currentTrayIcon;
@@ -125,11 +109,12 @@ namespace Lumina
                         _scrollHook.IsEnabled = enabled;
                     }
                 };
-                _scrollHook.Scrolled += delta =>
+                _scrollHook.Scrolled += steps =>
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        int step = delta > 0 ? 5 : -5;
+                        if (_cleanupStarted) return;
+                        long step = 5L * steps;
                         long newBright = (long)_viewModel.MasterBrightness + step;
                         _viewModel.MasterBrightness = (uint)Math.Clamp(newBright, 0, 100);
                         if (_notifyIcon != null)
@@ -140,7 +125,7 @@ namespace Lumina
                         {
                             _osdWindow?.ShowBrightness(_viewModel.MasterBrightness);
                         }
-                        App.Log($"[MainWindow] Tray scroll -> MasterBrightness={_viewModel.MasterBrightness}%");
+                        App.LogDebug($"[MainWindow] Tray scroll -> MasterBrightness={_viewModel.MasterBrightness}%");
                     });
                 };
 
@@ -326,7 +311,7 @@ namespace Lumina
                         NativeMethods.DestroyIcon(oldIcon.Handle);
                         oldIcon.Dispose();
                     }
-                    App.Log($"[MainWindow] Updated tray icon: isLightMode={_viewModel.IsLightTheme}, isTaskbarLight={_viewModel.IsSystemLightTheme}");
+                    App.LogDebug($"[MainWindow] Updated tray icon: isLightMode={_viewModel.IsLightTheme}, isTaskbarLight={_viewModel.IsSystemLightTheme}");
                 }
             }
             catch (Exception ex)
@@ -337,6 +322,8 @@ namespace Lumina
 
         public void PrepareExplicitExit()
         {
+            if (_cleanupStarted) return;
+            _cleanupStarted = true;
             _isExplicitExit = true;
             try
             {
@@ -348,6 +335,8 @@ namespace Lumina
                 _hotkeyService?.Dispose();
                 _hotkeyService = null;
                 _scrollHook?.Dispose();
+                _clickTimer?.Stop();
+                _osdWindow?.Close();
                 _flyoutWindow?.Close();
                 if (_notifyIcon != null)
                 {
@@ -462,12 +451,13 @@ namespace Lumina
         public void ShowAndActivate()
         {
             App.Log("[MainWindow] ShowAndActivate called");
-            Show();
-            Visibility = Visibility.Visible;
             if (WindowState == WindowState.Minimized)
             {
                 WindowState = WindowState.Normal;
             }
+            Show();
+            Visibility = Visibility.Visible;
+            InvalidateVisual();
             Activate();
             Topmost = true;
             Topmost = false;
@@ -702,20 +692,5 @@ namespace Lumina
             }
         }
 
-        public static void TrimMemory()
-        {
-            try
-            {
-                GC.Collect(2, GCCollectionMode.Forced, true, true);
-                GC.WaitForPendingFinalizers();
-                GC.Collect(2, GCCollectionMode.Forced, true, true);
-                System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-
-                using var proc = System.Diagnostics.Process.GetCurrentProcess();
-                NativeMethods.EmptyWorkingSet(proc.Handle);
-                NativeMethods.SetProcessWorkingSetSize(proc.Handle, (IntPtr)(-1), (IntPtr)(-1));
-            }
-            catch { }
-        }
     }
 }

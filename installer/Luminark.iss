@@ -2,10 +2,11 @@
 ; Defines packaging parameters for Windows 10/11 x64
 
 #define MyAppName "Luminark"
-#define MyAppVersion "1.1.20"
+#define MyAppVersion "1.1.21"
 #define MyAppPublisher "Silviu Vlasceanu"
 #define MyAppURL "https://github.com/silviuk/Luminark"
 #define MyAppExeName "Luminark.exe"
+#include "Runtime.iss"
 
 [Setup]
 AppId={{D37E8420-56B0-4A9B-983C-C04C61F12345}
@@ -64,7 +65,7 @@ Type: files; Name: "{userstartup}\Lumina.lnk"
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-function IsDotNet8DesktopInstalled: Boolean;
+function IsDotNet10DesktopInstalled: Boolean;
 var
   FindRec: TFindRec;
   SharedPath: String;
@@ -74,11 +75,13 @@ begin
   SharedPath := ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.WindowsDesktop.App');
   if DirExists(SharedPath) then
   begin
-    if FindFirst(SharedPath + '\8.*', FindRec) then
+    if FindFirst(SharedPath + '\10.*', FindRec) then
     begin
       try
         repeat
-          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+            (Copy(FindRec.Name, 1, 5) = '10.0.') and
+            (StrToIntDef(Copy(FindRec.Name, 6, 16), -1) >= {#DesktopRuntimeMinimumPatch}) then
           begin
             Result := True;
             Exit;
@@ -94,11 +97,13 @@ begin
   SharedPath := ExpandConstant('{commonpf}\dotnet\shared\Microsoft.WindowsDesktop.App');
   if (not Result) and DirExists(SharedPath) then
   begin
-    if FindFirst(SharedPath + '\8.*', FindRec) then
+    if FindFirst(SharedPath + '\10.*', FindRec) then
     begin
       try
         repeat
-          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+            (Copy(FindRec.Name, 1, 5) = '10.0.') and
+            (StrToIntDef(Copy(FindRec.Name, 6, 16), -1) >= {#DesktopRuntimeMinimumPatch}) then
           begin
             Result := True;
             Exit;
@@ -116,34 +121,84 @@ var
   ResultCode: Integer;
   InstallerPath: String;
   DownloadUrl: String;
+  QuotedPath: String;
+  VerifyCommand: String;
+  SignatureLogPath: String;
+  QuotedLogPath: String;
+  SignatureDiagnostic: AnsiString;
 begin
   Result := '';
-  Exec('taskkill.exe', '/F /IM Luminark.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Luminark.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(250);
 
-  if not IsDotNet8DesktopInstalled then
+  if not IsDotNet10DesktopInstalled then
   begin
-    DownloadUrl := 'https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe';
-    InstallerPath := ExpandConstant('{tmp}\dotnet-desktop-runtime-8.0-x64.exe');
+    DownloadUrl := '{#DesktopRuntimeUrl}';
+    InstallerPath := ExpandConstant('{tmp}\dotnet-desktop-runtime-10.0-x64.exe');
 
-    WizardForm.StatusLabel.Caption := 'Microsoft .NET 8 Desktop Runtime is required. Downloading official runtime...';
+    WizardForm.StatusLabel.Caption := 'Microsoft .NET 10 Desktop Runtime is required. Downloading official runtime...';
     try
-      DownloadTemporaryFile(DownloadUrl, 'dotnet-desktop-runtime-8.0-x64.exe', 'Downloading Microsoft .NET 8 Desktop Runtime (x64)...', nil);
+      DownloadTemporaryFile(DownloadUrl, 'dotnet-desktop-runtime-10.0-x64.exe', '{#DesktopRuntimeSha256}', nil);
     except
-      Result := 'Failed to download Microsoft .NET 8 Desktop Runtime. Please install it manually from https://dotnet.microsoft.com/download/dotnet/8.0 and restart setup.';
+      Result := 'Failed to verify or download Microsoft .NET 10 Desktop Runtime. Please install it from https://dotnet.microsoft.com/download/dotnet/10.0 and restart setup.';
       Exit;
     end;
 
-    WizardForm.StatusLabel.Caption := 'Installing Microsoft .NET 8 Desktop Runtime (x64)...';
+    QuotedPath := InstallerPath;
+    StringChangeEx(QuotedPath, #39, #39 + #39, True);
+    SignatureLogPath := ExpandConstant('{tmp}\runtime-publisher.txt');
+    QuotedLogPath := SignatureLogPath;
+    StringChangeEx(QuotedLogPath, #39, #39 + #39, True);
+    VerifyCommand := '$ErrorActionPreference=' + #39 + 'Stop' + #39 + '; try { ' +
+      'Import-Module ($PSHOME + ' + #39 + '\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' + #39 + ') -Force; ' +
+      '$s=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath ' + #39 + QuotedPath + #39 +
+      '; [IO.File]::WriteAllText(' + #39 + QuotedLogPath + #39 + ', [string]$s.Status + ' + #39 + ' ' + #39 + ' + $s.SignerCertificate.Subject)' +
+      '; if ($s.Status -ne ' + #39 + 'Valid' + #39 + ' -or $s.SignerCertificate.Subject -notmatch ' + #39 +
+      'O=Microsoft Corporation' + #39 + ') { exit 1 } } catch { [IO.File]::WriteAllText(' + #39 + QuotedLogPath + #39 + ', [string]$_); exit 1 }';
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -NonInteractive -Command "' + VerifyCommand + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      Result := 'The runtime publisher verification process could not be started.';
+      Exit;
+    end;
+    if LoadStringFromFile(SignatureLogPath, SignatureDiagnostic) then Log('Runtime publisher: ' + String(SignatureDiagnostic));
+    if ResultCode <> 0 then
+    begin
+      Result := 'The runtime publisher signature could not be verified. Installation was stopped.';
+      Exit;
+    end;
+    WizardForm.StatusLabel.Caption := 'Installing Microsoft .NET 10 Desktop Runtime (x64)...';
     if not Exec(InstallerPath, '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
     begin
-      Result := 'Failed to launch Microsoft .NET 8 Desktop Runtime installer (code: ' + IntToStr(ResultCode) + ').';
+      Result := 'Failed to launch Microsoft .NET 10 Desktop Runtime installer (code: ' + IntToStr(ResultCode) + ').';
       Exit;
     end;
 
-    if (ResultCode <> 0) and (ResultCode <> 3010) and (not IsDotNet8DesktopInstalled) then
+    if (ResultCode <> 0) and (ResultCode <> 3010) then
     begin
-      Result := 'Microsoft .NET 8 Desktop Runtime installation did not complete successfully (code: ' + IntToStr(ResultCode) + ').';
+      Result := 'Microsoft .NET 10 Desktop Runtime installation did not complete successfully (code: ' + IntToStr(ResultCode) + ').';
+      Exit;
+    end;
+    if ResultCode = 3010 then NeedsRestart := True;
+    // An SDK or damaged installation can retain MSI registration after its
+    // runtime files disappear. Repair the same verified package in that case.
+    if not IsDotNet10DesktopInstalled then
+    begin
+      if not Exec(InstallerPath, '/repair /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Result := 'Failed to repair the Microsoft .NET 10 Desktop Runtime.';
+        Exit;
+      end;
+      if (ResultCode <> 0) and (ResultCode <> 3010) then
+      begin
+        Result := 'Microsoft .NET 10 Desktop Runtime repair failed (code: ' + IntToStr(ResultCode) + ').';
+        Exit;
+      end;
+      if ResultCode = 3010 then NeedsRestart := True;
+    end;
+    if not IsDotNet10DesktopInstalled then
+    begin
+      Result := 'The required .NET 10 Desktop Runtime was not detected after installation.';
       Exit;
     end;
   end;
@@ -154,6 +209,6 @@ var
   ResultCode: Integer;
 begin
   Result := True;
-  Exec('taskkill.exe', '/F /IM Luminark.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Luminark.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(250);
 end;

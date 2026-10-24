@@ -25,6 +25,11 @@ namespace Lumina
                 _hideTimer.Stop();
                 FadeOut();
             };
+            Closed += (s, e) =>
+            {
+                _hideTimer.Stop();
+                BeginAnimation(OpacityProperty, null);
+            };
 
             SourceInitialized += (s, e) =>
             {

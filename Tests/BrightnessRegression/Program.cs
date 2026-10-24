@@ -13,13 +13,41 @@ internal static class Program
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
+    {
+        Lumina.App.SuppressLogging = true; // Fixtures must never write to the user's application log.
+        try
+        {
+            if (args.Contains("--hardware-smoke"))
+            {
+                uint? restore = null;
+                int option = Array.IndexOf(args, "--restore-brightness");
+                if (option >= 0)
+                {
+                    if (option + 1 >= args.Length || !uint.TryParse(args[option + 1], out uint value) || value > 100)
+                        throw new ArgumentException("Expected a restore brightness between 0 and 100.");
+                    restore = value;
+                }
+                HardwareChecks.Run(restore);
+            }
+            else Run();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            Environment.ExitCode = 1;
+        }
+        finally { Application.Current?.Shutdown(); }
+    }
+
+    private static void Run()
     {
         _ = new Application();
         CheckHardwareBurst(linked: true);
         CheckHardwareBurst(linked: false);
         CheckHardwareBurst(linked: true, enabled: false);
         CheckRapidDebounce();
+        ReliabilityChecks.Run();
         Console.WriteLine("PASS: rapid hardware events, linked/independent/disabled sync, user edits, debounce cancellation");
     }
 
@@ -42,7 +70,7 @@ internal static class Program
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
         // Inspect before the debounce delay expires; no hardware writes should exist.
-        var writes = (IDictionary)typeof(MonitorService).GetField("_debounceTokens", Private)!.GetValue(service)!;
+        var writes = (IDictionary)typeof(MonitorService).GetField("_workers", Private)!.GetValue(service)!;
         Assert(writes.Count == 0, "A hardware observation scheduled a write back to the laptop");
         Assert(monitor.CurrentBrightness == (enabled ? 60u : 10u), "Final hardware value was lost");
         Assert(observed.Count == (enabled ? 5 : 0), "Rapid hardware events were suppressed");

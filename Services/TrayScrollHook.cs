@@ -19,6 +19,7 @@ namespace Lumina.Services
         private readonly ManualResetEventSlim _startedEvent = new(false);
         private volatile bool _disposed = false;
         private volatile bool _isEnabled = true;
+        private readonly ScrollStepDispatcher _scrollDispatcher;
 
         public event Action<int>? Scrolled;
 
@@ -49,6 +50,10 @@ namespace Lumina.Services
         public TrayScrollHook(NotifyIcon notifyIcon, bool isEnabled = true)
         {
             _notifyIcon = notifyIcon;
+            _scrollDispatcher = new ScrollStepDispatcher(steps =>
+            {
+                if (!_disposed) Scrolled?.Invoke(steps);
+            });
             _isEnabled = isEnabled;
 
             _notifyIcon.MouseMove += (s, e) =>
@@ -243,7 +248,7 @@ namespace Lumina.Services
 
         private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL && _isEnabled)
+            if (nCode >= 0 && (int)wParam == NativeMethods.WM_MOUSEWHEEL && _isEnabled && !_disposed)
             {
                 var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
                 bool isOverTray = false;
@@ -274,13 +279,8 @@ namespace Lumina.Services
                 {
                     _lastHoverTime = DateTime.UtcNow;
                     short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
-                    App.Log($"[TrayScrollHook] Scrolled over tray icon: delta={delta}");
-                    
-                    var action = Scrolled;
-                    if (action != null)
-                    {
-                        ThreadPool.QueueUserWorkItem(_ => action(delta));
-                    }
+
+                    _scrollDispatcher.Add(Math.Sign(delta));
                     return (IntPtr)1; // Consume so taskbar doesn't scroll
                 }
             }
@@ -290,7 +290,9 @@ namespace Lumina.Services
 
         public void Dispose()
         {
+            if (_disposed) return;
             _disposed = true;
+            _scrollDispatcher.Dispose();
             StopHookThread();
             _startedEvent.Dispose();
         }

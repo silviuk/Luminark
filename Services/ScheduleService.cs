@@ -15,7 +15,7 @@ namespace Lumina.Services
         private readonly DispatcherTimer _timer;
         private bool? _lastAppliedDayMode = null;
         private Func<IEnumerable<MonitorInfo>>? _activeMonitorsProvider;
-        private int _ticksSinceLastTrim = 0;
+        private int _disposed;
 
         public event Action<bool>? ScheduleTriggered;
 
@@ -69,33 +69,6 @@ namespace Lumina.Services
         {
             EvaluateSchedule(force: false);
 
-            _ticksSinceLastTrim++;
-            if (_ticksSinceLastTrim >= 20)
-            {
-                _ticksSinceLastTrim = 0;
-                try
-                {
-                    bool isAnyWindowVisible = false;
-                    var app = System.Windows.Application.Current;
-                    if (app != null)
-                    {
-                        foreach (System.Windows.Window w in app.Windows)
-                        {
-                            if (w.IsVisible)
-                            {
-                                isAnyWindowVisible = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!isAnyWindowVisible)
-                    {
-                        Lumina.MainWindow.TrimMemory();
-                    }
-                }
-                catch { }
-            }
         }
 
         private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
@@ -209,6 +182,7 @@ namespace Lumina.Services
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             _timer.Stop();
             _nightLightService.StateChanged -= OnNightLightStateChanged;
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
