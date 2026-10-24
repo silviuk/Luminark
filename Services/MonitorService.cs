@@ -56,6 +56,11 @@ namespace Lumina.Services
 
         public MonitorService() { }
         internal MonitorService(Action<MonitorInfo, uint> brightnessOverride) => _brightnessOverride = brightnessOverride;
+        internal Task WhenIdleAsync()
+        {
+            lock (_workersGate) return Task.WhenAll(_workers.Values.Select(worker => worker.Completion));
+        }
+        internal int OwnedPhysicalHandleCount { get { lock (_lock) return _monitorGroups.Count; } }
 
         private void Schedule(MonitorInfo monitor, MonitorCommandKind kind, Action apply)
         {

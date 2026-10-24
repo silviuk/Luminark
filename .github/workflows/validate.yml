@@ -39,3 +39,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent publication failed.' }
           & $env:INNO_COMPILER /Qp installer/Luminark.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+      - name: Test missing-runtime installation on disposable runner
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem installer/Output/Luminark-Setup-*.exe)
+          if ($installers.Count -ne 1) { throw 'Expected one installer for acceptance testing.' }
+          ./Tools/Test-InstallerAcceptance.ps1 -Installer $installers[0].FullName

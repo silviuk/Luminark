@@ -13,9 +13,13 @@ internal static class Program
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
-        try { Run(); }
+        try
+        {
+            if (args.Contains("--hardware-smoke")) HardwareChecks.Run();
+            else Run();
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine(ex);

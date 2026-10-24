@@ -14,6 +14,7 @@ internal sealed class LatestMonitorWorker
     private MonitorCommandKind? _lastKind;
 
     internal int PendingCount { get { lock (_gate) return _pending.Count; } }
+    internal Task Completion { get { lock (_gate) return _running; } }
 
     internal void Schedule(MonitorCommandKind kind, Action apply)
     {
