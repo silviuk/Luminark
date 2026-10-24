@@ -11,7 +11,7 @@ on:
       publish_winget:
         description: 'Publish update to WinGet (microsoft/winget-pkgs)'
         required: true
-        default: true
+        default: false
         type: boolean
       publish_store:
         description: 'Publish update to Windows Store (Microsoft Partner Center)'
@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Test Store publishing guards
         shell: pwsh
@@ -151,8 +151,10 @@ jobs:
           }
 
           Write-Host "Downloading Microsoft Windows Package Manager Manifest Creator (wingetcreate)..."
-          $wcUrl = "https://github.com/microsoft/winget-create/releases/latest/download/wingetcreate.exe"
+          $releaseTool = Get-Content Tools/ReleaseTools.json -Raw | ConvertFrom-Json
+          $wcUrl = $releaseTool.wingetcreate.url
           Invoke-WebRequest -Uri $wcUrl -OutFile "wingetcreate.exe"
+          if ((Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash -ine $releaseTool.wingetcreate.sha256) { throw 'wingetcreate SHA256 verification failed.' }
 
           Write-Host "Submitting manifest update to microsoft/winget-pkgs..."
           Write-Host "Package ID: silviuk.Luminark"
@@ -160,7 +162,13 @@ jobs:
           Write-Host "URL:        $env:INSTALLER_URL"
 
           try {
-            .\wingetcreate.exe update --submit --token $env:WINGET_TOKEN --urls $env:INSTALLER_URL --version $env:VERSION silviuk.Luminark
+            $generated = Join-Path $env:RUNNER_TEMP 'winget-manifests'
+            .\wingetcreate.exe update --token $env:WINGET_TOKEN --urls $env:INSTALLER_URL --version $env:VERSION --out $generated silviuk.Luminark
+            if ($LASTEXITCODE -ne 0) { throw 'WinGet manifest generation failed.' }
+            $installer = @(Get-ChildItem $generated -Recurse -Filter silviuk.Luminark.installer.yaml)
+            if ($installer.Count -ne 1) { throw 'Expected one generated installer manifest.' }
+            ./Tools/Set-WinGetRuntime.ps1 -InstallerManifest $installer[0].FullName -Version $env:VERSION
+            .\wingetcreate.exe submit --token $env:WINGET_TOKEN --no-open --prtitle "New version: silviuk.Luminark version $env:VERSION" $installer[0].DirectoryName
             if ($LASTEXITCODE -eq 0) {
               Write-Host "Successfully submitted WinGet manifest update PR!"
               "winget_status=Submitted PR successfully via wingetcreate" >> $env:GITHUB_OUTPUT

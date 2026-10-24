@@ -93,6 +93,8 @@ namespace Lumina.Models
 
     public class MonitorInfo : INotifyPropertyChanged
     {
+        // Identifies which requested brightness was current when discovery began.
+        internal long BrightnessRevision { get; set; }
         public string Id { get; set; } = string.Empty;
         public string DeviceName { get; set; } = string.Empty;
         public string FriendlyName { get; set; } = string.Empty;

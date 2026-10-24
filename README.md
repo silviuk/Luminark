@@ -3,9 +3,9 @@
 > **Dynamic Windows 11 Theme, Night Light & Multi-Monitor Hardware Brightness Controller**
 
 [![Platform: Windows 11](https://img.shields.io/badge/Platform-Windows%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/silviuk/Luminark)
-[![Runtime: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![Runtime: .NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v1.1.3](https://img.shields.io/badge/Release-v1.1.3-orange)](https://github.com/silviuk/Luminark/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/silviuk/Luminark)](https://github.com/silviuk/Luminark/releases/latest)
 
 **Luminark** is a native Windows 11 desktop application designed to unify and automate your display environment. It dynamically synchronizes Windows system and app themes with scheduled day/night times or Windows Night Light, provides direct hardware multi-monitor brightness control via **DDC/CI** and **WMI**, and offers intuitive system tray gestures for effortless control.
 
@@ -57,8 +57,8 @@
   - One-click toggle accessible from both the mini flyout and main settings to keep your workstation and displays awake, preventing automatic idle sleep during long renders, downloads, or presentations.
 
 - 🚀 **Lightweight & Efficient**:
-  - Ultra-low memory footprint (~1–5 MB working set when minimized to tray).
-  - **0.0% CPU** utilization at idle using event-driven Windows hooks and system notifications.
+  - Bounded monitor command queues and event-driven registry watching.
+  - No routine full garbage collections or working-set eviction; memory and CPU usage depend on workload and hardware.
 
 ---
 
@@ -90,8 +90,8 @@
 
 ### Prerequisites
 - Windows 10 (Build 19041+) or Windows 11
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Inno Setup 6 (optional, for packaging the installer)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- Inno Setup 6.7.3 (optional, for packaging the installer)
 
 ### Build Steps
 ```powershell
@@ -103,7 +103,7 @@ cd Luminark
 dotnet build -c Release
 
 # Publish framework-dependent binaries
-dotnet publish Luminark.csproj -c Release -o installer\publish
+dotnet publish Luminark.csproj -c Release -o publish
 
 # (Optional) Compile Inno Setup installer
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\Luminark.iss
@@ -113,7 +113,7 @@ dotnet publish Luminark.csproj -c Release -o installer\publish
 
 ## 🏛️ Architecture & Interop
 
-- **Framework**: .NET 8 WPF with C# 12
+- **Framework**: .NET 10 WPF with C# 14
 - **UI Design**: [WPF-UI](https://github.com/lepoco/wpfui) (Windows 11 Fluent Design System)
 - **Hardware & Windows APIs**:
   - `dxva2.dll`: `GetMonitorBrightness`, `SetMonitorBrightness`, `GetPhysicalMonitorsFromHMONITOR`
@@ -134,7 +134,7 @@ Luminark includes a dedicated GitHub Action workflow (`.github/workflows/publish
 2. Select the **"Publish to Microsoft Store and WinGet"** workflow on the left sidebar.
 3. Click **"Run workflow"**:
    - **Release Tag**: Required exact tag (for example `v1.1.19`). Wait for Build and Release to finish before publishing.
-   - **Publish to WinGet**: Checkbox (default: enabled).
+   - **Publish to WinGet**: Checkbox (default: disabled; explicit opt-in while the initial submission awaits moderation).
    - **Publish to Windows Store**: Checkbox (default: enabled).
 4. Click **"Run workflow"**.
 
@@ -163,3 +163,36 @@ Configure these under **Settings > Secrets and variables > Actions**:
 ## 📄 License
 
 Distributed under the [MIT License](LICENSE). Copyright © 2026 Silviu Vlasceanu.
+
+## Validation and signing
+
+Use the SDK pinned by `global.json`. Run `dotnet restore Tests/BrightnessRegression --locked-mode`,
+then `dotnet run --project Tests/BrightnessRegression -c Release --no-restore`.
+Run `./Tools/Test-StorePublishing.ps1`, `./Tools/Test-ReleaseInputs.ps1`, and
+`./Tools/Audit-Dependencies.ps1` before a release.
+
+The regression suite uses fake monitor writes and temporary registry/file fixtures. It covers
+rapid hardware events, bounded/fair brightness and volume scheduling, shutdown, stale discovery,
+settings backup recovery, registry idle/change notifications, scroll batching, and log rotation.
+Physical USB-C/DP reconnect, input switching, sleep/wake, and clean-machine installation still
+need a hardware/VM acceptance pass.
+
+For a read-only ten-minute process sample, run
+`./Tools/Measure-Performance.ps1 -ProcessId <Luminark PID> -OutputPath baseline.csv`.
+Compare old and new builds under the same conditions, using private bytes, CPU, page faults,
+and handle counts. Repeat show/hide and reconnect cycles; do not infer heap savings from a
+small working set. UI latency and actual panel latency should be assessed separately.
+
+Release builds now require `CODESIGN_PFX_BASE64` and `CODESIGN_PFX_PASSWORD` GitHub secrets
+for a trusted Windows code-signing certificate. These are not configured automatically.
+The workflow signs the application and installer, verifies the signer and RFC3161 timestamp,
+and removes the imported certificate. Without signing credentials, a release stops before
+publishing. Configure a signing service instead if your certificate requires remote signing;
+never export an HSM-backed key to create a PFX.
+
+The runtime bootstrapper pins an official Microsoft URL and SHA256 and checks the publisher
+before execution. Update it with `./Tools/Update-Runtime.ps1 -Version 10.0.<patch>`;
+the update command verifies the download against Microsoft's SHA512 metadata and signature.
+Review and commit the changed runtime constants, SDK version, and dependency locks together.
+Third-party actions and release tools are pinned; Dependabot proposes action and NuGet updates.
+WinGet publication remains an explicit opt-in and existing historical manifests are unchanged.

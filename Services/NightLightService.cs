@@ -21,92 +21,27 @@ namespace Lumina.Services
 
         public event Action<bool>? StateChanged;
 
-        private readonly System.Threading.CancellationTokenSource _cts = new();
-        private System.Threading.Thread? _watcherThread;
+        private readonly RegistryChangeWatcher? _watcher;
+        private bool _lastActive;
+        private int _disposed;
 
-        public NightLightService()
+        public NightLightService(bool watchChanges = true)
         {
-            StartWatcher();
+            _lastActive = IsNightLightActive();
+            if (watchChanges)
+                _watcher = new RegistryChangeWatcher(CloudStoreRootPath, OnRegistryChanged);
         }
 
-        private void StartWatcher()
+        private void OnRegistryChanged()
         {
-            try
+            bool active = IsNightLightActive();
+            if (active == _lastActive || Volatile.Read(ref _disposed) != 0) return;
+            _lastActive = active;
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
             {
-                _watcherThread = new System.Threading.Thread(WatcherLoop)
-                {
-                    IsBackground = true,
-                    Name = "NightLightRegistryWatcher"
-                };
-                _watcherThread.Start();
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[NightLightService] Failed to start registry watcher: {ex.Message}");
-            }
+                if (Volatile.Read(ref _disposed) == 0) StateChanged?.Invoke(active);
+            });
         }
-
-        private void WatcherLoop()
-        {
-            using var changeEvent = new System.Threading.AutoResetEvent(false);
-            var waitHandles = new System.Threading.WaitHandle[] { changeEvent, _cts.Token.WaitHandle };
-            bool lastActive = IsNightLightActive();
-            App.Log($"[NightLightService] Watcher started. Initial active state: {lastActive}");
-
-            while (!_cts.IsCancellationRequested)
-            {
-                try
-                {
-                    using (var key = Registry.CurrentUser.OpenSubKey(CloudStoreRootPath))
-                    {
-                        if (key != null)
-                        {
-                            NativeMethods.RegNotifyChangeKeyValue(
-                                key.Handle.DangerousGetHandle(),
-                                true, // Watch all CloudStore bluelight subtrees
-                                NativeMethods.REG_NOTIFY_CHANGE_NAME | NativeMethods.REG_NOTIFY_CHANGE_LAST_SET,
-                                changeEvent.SafeWaitHandle.DangerousGetHandle(),
-                                true);
-                        }
-                    }
-
-                    // Wait on native registry event or cancellation token (event-driven, 0% CPU idle)
-                    int waitIndex = System.Threading.WaitHandle.WaitAny(waitHandles);
-
-                    if (waitIndex == 1 || _cts.IsCancellationRequested)
-                    {
-                        break;
-                    }
-
-                    if (waitIndex == 0)
-                    {
-                        // Native event triggered -> brief debounce for Windows commit
-                        System.Threading.Thread.Sleep(80);
-                    }
-
-                    bool currentActive = IsNightLightActive();
-                    if (currentActive != lastActive)
-                    {
-                        lastActive = currentActive;
-                        App.Log($"[NightLightService] Night Light active changed -> {currentActive}");
-                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
-                        {
-                            StateChanged?.Invoke(currentActive);
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Log($"[NightLightService Watcher ERROR] {ex.Message}");
-                    try
-                    {
-                        if (_cts.Token.WaitHandle.WaitOne(2000)) break;
-                    }
-                    catch { break; }
-                }
-            }
-        }
-
         public bool IsSupported()
         {
             try
@@ -261,12 +196,8 @@ namespace Lumina.Services
 
         public void Dispose()
         {
-            try
-            {
-                _cts.Cancel();
-                _cts.Dispose();
-            }
-            catch { }
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _watcher?.Dispose();
         }
     }
 }

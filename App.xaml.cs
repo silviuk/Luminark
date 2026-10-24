@@ -24,30 +24,9 @@ namespace Lumina
         private RegisteredWaitHandle? _activateWaitHandle;
         private EventWaitHandle? _activateEvent;
 
-        public static void Log(string message)
-        {
-            try
-            {
-                string dir = Path.GetDirectoryName(LogPath)!;
-                Directory.CreateDirectory(dir);
-
-                // Rotate log if it exceeds 5 MB to prevent unbounded growth
-                if (File.Exists(LogPath))
-                {
-                    var fi = new FileInfo(LogPath);
-                    if (fi.Length > 5 * 1024 * 1024)
-                    {
-                        string oldLog = Path.Combine(dir, "luminark.log.old");
-                        try { File.Delete(oldLog); } catch { }
-                        try { File.Move(LogPath, oldLog); } catch { }
-                    }
-                }
-
-                File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
-            }
-            catch { }
-        }
-
+        private static readonly Lazy<AsyncFileLogger> Logger = new(() => new AsyncFileLogger(LogPath));
+        public static void Log(string message) => Logger.Value.Write(message);
+        public static void LogDebug(string message) => Logger.Value.Write(message, debug: true);
         public static readonly int WM_SHOWLUMINARK = NativeMethods.RegisterWindowMessage("LUMINARK_ACTIVATE_WINDOW_MSG");
 
         private void Application_Startup(object sender, StartupEventArgs e)
@@ -154,7 +133,7 @@ namespace Lumina
                 _nightLightService = new NightLightService();
 
                 Log("Initializing ScheduleService");
-                _scheduleService = new ScheduleService(_themeService, _monitorService, _nightLightService, () => settings);
+                _scheduleService = new ScheduleService(_themeService, _monitorService, _nightLightService, _settingsService.Load);
 
                 Log("Applying ApplicationThemeManager");
                 try
@@ -199,18 +178,6 @@ namespace Lumina
                 Log("Starting ScheduleService");
                 _scheduleService.Start();
 
-                // Shed startup JIT/XAML allocations after initialization stabilizes
-                _ = System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (mainWindow.Visibility != Visibility.Visible || mainWindow.WindowState == WindowState.Minimized)
-                        {
-                            Lumina.MainWindow.TrimMemory();
-                        }
-                    });
-                });
-
                 Log("Application_Startup completed successfully.");
             }
             catch (Exception ex)
@@ -224,6 +191,7 @@ namespace Lumina
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             Log("Application_Exit triggered.");
+            if (MainWindow is MainWindow window) window.PrepareExplicitExit();
             try { _activateWaitHandle?.Unregister(null); } catch { }
             try { _activateEvent?.Dispose(); } catch { }
             try { _viewModel?.Dispose(); } catch { }
@@ -233,6 +201,7 @@ namespace Lumina
             try { _monitorService?.Dispose(); } catch { }
             try { _themeService?.Dispose(); } catch { }
             try { _nightLightService?.Dispose(); } catch { }
+            if (Logger.IsValueCreated) Logger.Value.Dispose();
         }
     }
 }

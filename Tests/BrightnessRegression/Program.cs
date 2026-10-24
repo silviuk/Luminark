@@ -15,11 +15,23 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        try { Run(); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            Environment.ExitCode = 1;
+        }
+        finally { Application.Current?.Shutdown(); }
+    }
+
+    private static void Run()
+    {
         _ = new Application();
         CheckHardwareBurst(linked: true);
         CheckHardwareBurst(linked: false);
         CheckHardwareBurst(linked: true, enabled: false);
         CheckRapidDebounce();
+        ReliabilityChecks.Run();
         Console.WriteLine("PASS: rapid hardware events, linked/independent/disabled sync, user edits, debounce cancellation");
     }
 
@@ -42,7 +54,7 @@ internal static class Program
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
         // Inspect before the debounce delay expires; no hardware writes should exist.
-        var writes = (IDictionary)typeof(MonitorService).GetField("_debounceTokens", Private)!.GetValue(service)!;
+        var writes = (IDictionary)typeof(MonitorService).GetField("_workers", Private)!.GetValue(service)!;
         Assert(writes.Count == 0, "A hardware observation scheduled a write back to the laptop");
         Assert(monitor.CurrentBrightness == (enabled ? 60u : 10u), "Final hardware value was lost");
         Assert(observed.Count == (enabled ? 5 : 0), "Rapid hardware events were suppressed");

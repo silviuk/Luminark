@@ -48,5 +48,44 @@ namespace Lumina.Models
 
         // Known external monitors for multi-host retention when display switches to another device
         public List<string> KnownExternalMonitorIds { get; set; } = new();
+
+        public void Normalize()
+        {
+            DayTime = ValidTime(DayTime, TimeSpan.FromHours(7));
+            NightTime = ValidTime(NightTime, TimeSpan.FromHours(20));
+            DayBrightness = Math.Min(DayBrightness, 100);
+            NightBrightness = Math.Min(NightBrightness, 100);
+            BrightnessStep = new[] { 1, 2, 5, 10 }.Contains(BrightnessStep) ? BrightnessStep : 5;
+            NightLightSyncMode = NightLightSyncMode == 1 ? 1 : 0;
+            TrayDoubleClickAction = TrayDoubleClickAction == 1 ? 1 : 0;
+            LockScreenDelaySeconds = Math.Clamp(LockScreenDelaySeconds, 0, 60);
+            MonitorInputSwitchDelaySeconds = Math.Clamp(MonitorInputSwitchDelaySeconds, 0, 60);
+            PreventSleepDurationMinutes = Math.Clamp(PreventSleepDurationMinutes, 0, 10080);
+            CustomMonitorNames ??= new();
+            CustomInputNames ??= new();
+            VisibleInputCodes ??= new();
+            KnownExternalMonitorIds ??= new();
+            foreach (var key in CustomMonitorNames.Keys.ToArray())
+                if (string.IsNullOrWhiteSpace(CustomMonitorNames[key])) CustomMonitorNames.Remove(key);
+            foreach (var key in CustomInputNames.Keys.ToArray())
+            {
+                CustomInputNames[key] ??= new();
+                foreach (var code in CustomInputNames[key].Keys.ToArray())
+                    if (code == 0 || code > ushort.MaxValue || string.IsNullOrWhiteSpace(CustomInputNames[key][code]))
+                        CustomInputNames[key].Remove(code);
+            }
+            foreach (var key in VisibleInputCodes.Keys.ToArray())
+                VisibleInputCodes[key] = (VisibleInputCodes[key] ?? new()).Where(c => c > 0 && c <= ushort.MaxValue).Distinct().ToList();
+            KnownExternalMonitorIds = KnownExternalMonitorIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+            DarkModeShortcut ??= "Ctrl+Alt+D";
+            LightModeShortcut ??= "Ctrl+Alt+L";
+            ToggleThemeShortcut ??= "Ctrl+Alt+T";
+            LockAndTurnOffShortcut ??= "Win+J";
+            BrightnessUpShortcut ??= "Ctrl+Alt+Up";
+            BrightnessDownShortcut ??= "Ctrl+Alt+Down";
+        }
+
+        private static TimeSpan ValidTime(TimeSpan value, TimeSpan fallback) =>
+            value >= TimeSpan.Zero && value < TimeSpan.FromDays(1) ? value : fallback;
     }
 }

@@ -213,12 +213,6 @@ namespace Lumina.Services
         [DllImport("user32.dll", CharSet = CharSet.Ansi)]
         public static extern bool EnumDisplayDevices(string? lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
-        [DllImport("psapi.dll")]
-        public static extern bool EmptyWorkingSet(IntPtr hProcess);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize, IntPtr dwMaximumWorkingSetSize);
-
         public const int WM_SYSCOMMAND = 0x0112;
         public const int SC_MONITORPOWER = 0xF170;
         public const int SM_CXSMICON = 49;
@@ -345,11 +339,11 @@ namespace Lumina.Services
         [Flags]
         public enum EXECUTION_STATE : uint
         {
-            ES_SYSTEM_REQUIRED   = 0x00000001,
-            ES_DISPLAY_REQUIRED  = 0x00000002,
-            ES_USER_PRESENT      = 0x00000004,
+            ES_SYSTEM_REQUIRED = 0x00000001,
+            ES_DISPLAY_REQUIRED = 0x00000002,
+            ES_USER_PRESENT = 0x00000004,
             ES_AWAYMODE_REQUIRED = 0x00000040,
-            ES_CONTINUOUS        = 0x80000000
+            ES_CONTINUOUS = 0x80000000
         }
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]

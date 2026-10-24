@@ -21,4 +21,4 @@ Clean, modern Windows 11-style flyout above the system tray for instant access t
 Prevent your PC from sleeping during long downloads or renders with configurable keep-awake timers, or use the Win+J global shortcut to lock the workstation and turn off displays while keeping the computer awake.
 
 • Performance:
-Built natively with a minimal memory footprint (~1–5 MB working set when minimized) and zero idle CPU usage.
+Built natively with event-driven Windows integration, bounded hardware command queues, and background logging. CPU and memory usage depend on workload and display hardware.

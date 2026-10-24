@@ -1,0 +1,12 @@
+{
+  "innosetup": {
+    "version": "6.7.3",
+    "url": "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe",
+    "sha256": "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732"
+  },
+  "wingetcreate": {
+    "version": "1.12.13.0",
+    "url": "https://github.com/microsoft/winget-create/releases/download/v1.12.13.0/wingetcreate.exe",
+    "sha256": "24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea"
+  }
+}

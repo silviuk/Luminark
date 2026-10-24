@@ -19,6 +19,7 @@ namespace Lumina.ViewModels
         private readonly ScheduleService _scheduleService;
 
         private AppSettings _settings;
+        private int _disposed;
         private bool _isUpdatingMasterBrightness = false;
         private bool _isUpdatingIndividualBrightness = false;
 
@@ -209,6 +210,7 @@ namespace Lumina.ViewModels
 
         public void ScheduleDisplaySettingsRefresh(bool isDisplayEvent = true)
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             if (_isWorkstationLocked)
             {
                 if (!NativeMethods.IsWorkstationLocked())
@@ -374,8 +376,10 @@ namespace Lumina.ViewModels
 
         private void OnThemeChanged(bool isLight)
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
+                if (Volatile.Read(ref _disposed) != 0) return;
                 if (_settings.LinkBrightnessToTheme && Monitors.Count > 0)
                 {
                     uint targetBrightness = isLight ? _settings.DayBrightness : _settings.NightBrightness;
@@ -387,8 +391,10 @@ namespace Lumina.ViewModels
 
         private void OnNightLightStateChanged(bool isActive)
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
             {
+                if (Volatile.Read(ref _disposed) != 0) return;
                 RefreshNightLightInfo();
                 OnPropertyChanged(nameof(NightLightStatusText));
                 OnPropertyChanged(nameof(SunsetText));
@@ -399,8 +405,10 @@ namespace Lumina.ViewModels
 
         private void OnScheduleTriggered(bool isDay)
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
+                if (Volatile.Read(ref _disposed) != 0) return;
                 UpdateThemeProperties();
                 if (_settings.AutoBrightnessEnabled)
                 {
@@ -558,6 +566,7 @@ namespace Lumina.ViewModels
 
         public void ApplyDetectedMonitors(List<MonitorInfo> detected, bool forceRecreate = false)
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             bool sameActiveSet = !forceRecreate &&
                 Monitors.Count > 0 &&
                 Monitors.Count(m => m.IsActive) == detected.Count &&
@@ -595,7 +604,7 @@ namespace Lumina.ViewModels
                     }
                     if (!_isUpdatingIndividualBrightness && !_isUpdatingMasterBrightness)
                     {
-                        existing.CurrentBrightness = fresh.CurrentBrightness;
+                        SetObservedBrightness(existing, _monitorService.GetDetectedBrightness(fresh));
                     }
                     existing.CurrentVolume = fresh.CurrentVolume;
                     existing.IsMuted = fresh.IsMuted;
@@ -637,7 +646,7 @@ namespace Lumina.ViewModels
                 mon.SupportsAudioVolume = fresh.SupportsAudioVolume;
                 mon.SupportsAudioMute = fresh.SupportsAudioMute;
                 mon.SupportsInputSelect = fresh.SupportsInputSelect;
-                mon.CurrentBrightness = fresh.CurrentBrightness;
+                SetObservedBrightness(mon, _monitorService.GetDetectedBrightness(fresh));
                 mon.CurrentVolume = fresh.CurrentVolume;
                 mon.IsMuted = fresh.IsMuted;
                 if (fresh.ActiveInputCode.HasValue && !mon.IsSwitchingInput)
@@ -1574,30 +1583,38 @@ namespace Lumina.ViewModels
 
         public event Action<uint>? BrightnessStepped;
 
+        private void SetObservedBrightness(MonitorInfo monitor, uint brightness)
+        {
+            bool previous = _isUpdatingIndividualBrightness;
+            _isUpdatingIndividualBrightness = true;
+            try { monitor.CurrentBrightness = brightness; }
+            finally { _isUpdatingIndividualBrightness = previous; }
+        }
+
         public void StepMasterBrightness(bool increase)
         {
             int step = BrightnessStep;
             long target = increase ? (long)_masterBrightness + step : (long)_masterBrightness - step;
             uint newBrightness = (uint)Math.Clamp(target, 0, 100);
             MasterBrightness = newBrightness;
-            App.Log($"[MainViewModel] Hotkey adjusted MasterBrightness: {newBrightness}% (step={(increase ? "+" : "-")}{step})");
+            App.LogDebug($"[MainViewModel] Hotkey adjusted MasterBrightness: {newBrightness}% (step={(increase ? "+" : "-")}{step})");
             BrightnessStepped?.Invoke(newBrightness);
         }
 
         private void OnInternalBrightnessChanged(object? sender, uint newBrightness)
         {
-            if (!SyncLaptopBrightnessKeys) return;
+            if (!SyncLaptopBrightnessKeys || Volatile.Read(ref _disposed) != 0) return;
 
             System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
             {
-                App.Log($"[MainViewModel] Laptop hardware brightness event received: {newBrightness}%");
+                if (Volatile.Read(ref _disposed) != 0) return;
+                App.LogDebug($"[MainViewModel] Laptop hardware brightness event received: {newBrightness}%");
 
                 var internalMon = Monitors.FirstOrDefault(m => m.Type == MonitorType.WmiInternal);
                 if (internalMon != null)
                 {
-                    _isUpdatingIndividualBrightness = true;
-                    internalMon.CurrentBrightness = newBrightness;
-                    _isUpdatingIndividualBrightness = false;
+                    _monitorService.ObserveBrightness(internalMon, newBrightness);
+                    SetObservedBrightness(internalMon, newBrightness);
                 }
 
                 if (IsMonitorsLinked)
@@ -1610,9 +1627,7 @@ namespace Lumina.ViewModels
                     {
                         if (mon.Type == MonitorType.DdcCi && mon.IsActive)
                         {
-                            _isUpdatingIndividualBrightness = true;
-                            mon.CurrentBrightness = newBrightness;
-                            _isUpdatingIndividualBrightness = false;
+                            SetObservedBrightness(mon, newBrightness);
                             _monitorService.SetBrightness(mon, newBrightness);
                         }
                     }
@@ -1858,19 +1873,27 @@ namespace Lumina.ViewModels
             {
                 disp.BeginInvoke(() =>
                 {
+                    if (Volatile.Read(ref _disposed) != 0) return;
                     var res = NativeMethods.SetThreadExecutionState(esFlags);
-                    App.Log($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
+                    App.LogDebug($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
                 });
             }
             else
             {
                 var res = NativeMethods.SetThreadExecutionState(esFlags);
-                App.Log($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
+                App.LogDebug($"[Power] SetThreadExecutionState on UI thread (locked={_isWorkstationLocked}) returned {res}");
             }
         }
 
         public void ReapplyAwakeState()
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(ReapplyAwakeState);
+                return;
+            }
             if (_isWorkstationLocked && _consoleDisplayState == 1 && !NativeMethods.IsWorkstationLocked())
             {
                 _isWorkstationLocked = false;
@@ -1910,6 +1933,7 @@ namespace Lumina.ViewModels
 
         public void UpdateExecutionState()
         {
+            if (Volatile.Read(ref _disposed) != 0) return;
             try
             {
                 if (_settings.PreventSleep)
@@ -2281,12 +2305,17 @@ namespace Lumina.ViewModels
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             try
             {
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
                 _monitorService.InternalBrightnessChanged -= OnInternalBrightnessChanged;
+                _themeService.ThemeChanged -= OnThemeChanged;
+                _nightLightService.StateChanged -= OnNightLightStateChanged;
+                _scheduleService.ScheduleTriggered -= OnScheduleTriggered;
+                foreach (var monitor in Monitors) monitor.CancelInputSwitch();
                 try { _displayChangeCts?.Cancel(); _displayChangeCts?.Dispose(); } catch { }
                 try { _lockPowerOffCts?.Cancel(); _lockPowerOffCts?.Dispose(); } catch { }
                 StopPreventSleepTimer();
