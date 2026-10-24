@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'GitHub Release Tag to publish (e.g. v1.0.4). Leave blank for latest release.'
-        required: false
+        description: 'Exact release tag to publish (for example v1.1.19).'
+        required: true
         default: ''
         type: string
       publish_winget:
@@ -22,6 +22,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: luminark-publication
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish Release
@@ -31,6 +35,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Test Store publishing guards
+        shell: pwsh
+        run: ./Tools/Test-StorePublishing.ps1
+
       # -----------------------------------------------------------------------
       # Step 1: Resolve Release Info & Download Assets
       # -----------------------------------------------------------------------
@@ -39,54 +47,35 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           Write-Host "Resolving GitHub Release details..."
-          $inputTag = "${{ inputs.release_tag }}".Trim()
-
-          if ([string]::IsNullOrWhiteSpace($inputTag)) {
-            Write-Host "No release tag supplied. Querying latest release..."
-            $releaseJson = gh release view --json tagName,name,assets,body
-          } else {
-            Write-Host "Querying release tag: $inputTag..."
-            $releaseJson = gh release view $inputTag --json tagName,name,assets,body
+          $ErrorActionPreference = 'Stop'
+          . ./Tools/StorePublishing.ps1
+          $tag = $env:RELEASE_TAG.Trim()
+          if ($tag -notmatch '^v([1-9][0-9]*)\.([0-9]+)\.([0-9]+)$') {
+            throw 'An explicit stable release tag such as v1.1.19 is required.'
           }
-
+          $version = $tag.Substring(1)
+          $releaseJson = gh release view $tag --json tagName,name,assets,body,isDraft,isPrerelease
+          if ($LASTEXITCODE -ne 0) { throw "Cannot resolve release $tag." }
           $release = $releaseJson | ConvertFrom-Json
-          $tag = $release.tagName
-          $version = $tag.TrimStart('v')
+          if ($release.tagName -cne $tag -or $release.isDraft -or $release.isPrerelease) {
+            throw 'Only the requested published stable release may be submitted.'
+          }
+          git fetch --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot fetch release source $tag." }
 
           Write-Host "Target Release Tag: $tag (Version: $version)"
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
 
-          # Extract release notes for Store What's New section
-          $releaseNotes = ""
-          if (Test-Path "RELEASE_NOTES.md") {
-            $releaseNotes = (Get-Content "RELEASE_NOTES.md" -Raw).Trim()
-            Write-Host "Found release notes from RELEASE_NOTES.md."
-          } elseif ($release.body -and -not $release.body.StartsWith("**Full Changelog**")) {
-            $releaseNotes = $release.body.Trim()
-            Write-Host "Found release notes from GitHub Release body."
+          # Read notes from the selected release source, never the workflow's main checkout.
+          $releaseNotes = (git show "${tag}:RELEASE_NOTES.md") -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $releaseNotes -notmatch "(?m)^What's New in Luminark v$([regex]::Escape($version)):") {
+            throw "Release notes are missing or do not identify $tag."
           }
-
-          if (-not $releaseNotes) {
-            $manifestPath = "manifests/s/silviuk/Luminark/$version/silviuk.Luminark.locale.en-US.yaml"
-            if (Test-Path $manifestPath) {
-              $raw = Get-Content $manifestPath -Raw
-              if ($raw -match "(?ms)ReleaseNotes:\s*\|-\r?\n(.*?)(?=\r?\n[a-zA-Z0-9_-]+:|\Z)") {
-                $releaseNotes = $matches[1].Trim()
-                Write-Host "Found release notes from $manifestPath."
-              }
-            }
-          }
-
-          if (-not $releaseNotes -and (Test-Path "CHANGELOG.md")) {
-            $cl = Get-Content "CHANGELOG.md" -Raw
-            if ($cl -match "(?ms)##\s*\[?$([regex]::Escape($version))\]?.*?\r?\n(.*?)(?=\r?\n##|\Z)") {
-              $releaseNotes = $matches[1].Trim()
-              Write-Host "Found release notes from CHANGELOG.md."
-            }
-          }
+          $releaseNotes = $releaseNotes.Trim()
 
           # Store API releaseNotes character limit is 1500 chars
           if ($releaseNotes.Length -gt 1500) {
@@ -99,9 +88,21 @@ jobs:
           # Create directory and download all release artifacts
           New-Item -ItemType Directory -Path "release-assets" -Force | Out-Null
           gh release download $tag --dir release-assets
+          if ($LASTEXITCODE -ne 0) { throw "Release assets are not ready for $tag." }
 
-          $exeAsset = Get-ChildItem -Path release-assets -Filter "*.exe" | Select-Object -First 1
-          $msixAsset = Get-ChildItem -Path release-assets -Filter "*.msix" | Select-Object -First 1
+          $exeAsset = Get-Item "release-assets/Luminark-Setup-$tag.exe" -ErrorAction SilentlyContinue
+          $msixAsset = Get-Item "release-assets/Luminark-$version.0-x64.msix" -ErrorAction SilentlyContinue
+          if (-not $exeAsset -or -not $msixAsset) { throw "Expected versioned assets are missing from $tag." }
+          foreach ($asset in @($exeAsset, $msixAsset)) {
+            $remote = @($release.assets | Where-Object { $_.name -ceq $asset.Name })
+            $actual = 'sha256:' + (Get-FileHash -LiteralPath $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($remote.Count -ne 1 -or $remote[0].digest -ne $actual) {
+              throw "Release asset SHA256 mismatch or missing digest: $($asset.Name)"
+            }
+            Write-Host "Verified SHA256 for $($asset.Name): $actual"
+          }
+          $identity = Get-LuminarkPackageIdentity -Path $msixAsset.FullName -Version $version
+          Write-Host "Verified MSIX identity: $($identity.Name) $($identity.Version) $($identity.ProcessorArchitecture)"
 
           if ($exeAsset) {
             Write-Host "Found Setup Executable: $($exeAsset.Name)"
@@ -139,9 +140,8 @@ jobs:
           Write-Host "=========================================================="
 
           if (-not $env:WINGET_TOKEN) {
-            Write-Warning "::warning::WINGET_TOKEN secret is not configured in this repository. Skipping WinGet update. Add a GitHub Personal Access Token (PAT) with 'public_repo' scope to repository secrets as WINGET_TOKEN."
-            "winget_status=Skipped (Missing WINGET_TOKEN secret)" >> $env:GITHUB_OUTPUT
-            exit 0
+            "winget_status=Failed (Missing WINGET_TOKEN secret)" >> $env:GITHUB_OUTPUT
+            throw "WINGET_TOKEN is required when WinGet publication is requested."
           }
 
           if (-not $env:INSTALLER_URL) {
@@ -166,20 +166,19 @@ jobs:
               "winget_status=Submitted PR successfully via wingetcreate" >> $env:GITHUB_OUTPUT
             } else {
               Write-Warning "wingetcreate exited with code $LASTEXITCODE. If the initial package PR is still open/pending merge in microsoft/winget-pkgs, subsequent updates cannot be submitted until that initial PR is merged."
-              "winget_status=Exited with code $LASTEXITCODE (Check PR status)" >> $env:GITHUB_OUTPUT
+              throw "wingetcreate failed with exit code $LASTEXITCODE. Check the initial package PR status."
             }
           } catch {
             Write-Warning "Error during wingetcreate execution: $_"
-            "winget_status=Error: $_" >> $env:GITHUB_OUTPUT
-          } finally {
-            $global:LASTEXITCODE = 0
+            "winget_status=Failed" >> $env:GITHUB_OUTPUT
+            throw
           }
 
       # -----------------------------------------------------------------------
       # Step 3: Publish to Windows Store (Microsoft Partner Center)
       # -----------------------------------------------------------------------
       - name: Publish to Microsoft Store
-        if: ${{ !cancelled() && inputs.publish_store }}
+        if: ${{ !cancelled() && inputs.publish_store && steps.release_info.outcome == 'success' }}
         id: msstore
         shell: pwsh
         env:
@@ -188,12 +187,17 @@ jobs:
           CLIENT_ID: ${{ secrets.MS_STORE_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
           APP_ID: ${{ secrets.MS_STORE_APP_ID }}
+          VERSION: ${{ steps.release_info.outputs.version }}
           MSIX_PATH: ${{ steps.release_info.outputs.msix_path }}
           EXE_PATH: ${{ steps.release_info.outputs.exe_path }}
         run: |
           Write-Host "=========================================================="
           Write-Host "Starting Microsoft Store Publication"
           Write-Host "=========================================================="
+
+          $ErrorActionPreference = 'Stop'
+          . ./Tools/StorePublishing.ps1
+          $null = Get-LuminarkPackageIdentity -Path $env:MSIX_PATH -Version $env:VERSION
 
           $missingSecrets = @()
           if (-not $env:TENANT_ID) { $missingSecrets += "MS_STORE_TENANT_ID" }
@@ -204,22 +208,7 @@ jobs:
 
           if ($missingSecrets.Count -gt 0) {
             $list = $missingSecrets -join ", "
-            Write-Warning "::warning::Microsoft Store credentials are missing ($list). Skipping Windows Store publication."
-            "store_status=Skipped (Missing secrets: $list)" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
-
-          if (-not ($env:MSIX_PATH -and (Test-Path $env:MSIX_PATH))) {
-            if ($env:EXE_PATH -and (Test-Path $env:EXE_PATH)) {
-              Write-Host "Win32 EXE Installer Detected: $($env:EXE_PATH)"
-              Write-Host "Store MSIX package not found. Draft release notes can be managed in Partner Center."
-              "store_status=Win32 EXE release ready (Requires MSIX for automated package submission)" >> $env:GITHUB_OUTPUT
-              exit 0
-            } else {
-              Write-Error "No installer package (.msix or .exe) found in release assets."
-              "store_status=Failed (No installer found)" >> $env:GITHUB_OUTPUT
-              exit 1
-            }
+            throw "Microsoft Store credentials are missing: $list"
           }
 
           Write-Host "Authenticating with Microsoft Partner Center (Entra ID)..."
@@ -247,34 +236,30 @@ jobs:
           $appUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID"
           $appObj = Invoke-RestMethod -Method Get -Uri $appUri -Headers $headers
 
-          # Check if there is an existing pending submission
-          $createSubUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions"
+          # Reuse only editable submissions; a committed submission must match this release.
+          $createSubUri = "$appUri/submissions"
           $subId = $null
           $subObj = $null
-          if ($appObj.pendingApplicationSubmission -and $appObj.pendingApplicationSubmission.id) {
+          if ($appObj.pendingApplicationSubmission.id) {
             $candidateSubId = $appObj.pendingApplicationSubmission.id
-            Write-Host "Found existing pending submission: $candidateSubId"
-            $statusUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId/status"
-            try {
-              $statusObj = Invoke-RestMethod -Method Get -Uri $statusUri -Headers $headers
-              Write-Host "Existing submission status: $($statusObj.status)"
-              if ($statusObj.status -eq "CommitStarted" -or $statusObj.status -eq "PreProcessing" -or $statusObj.status -eq "Certification" -or $statusObj.status -eq "Release") {
-                Write-Host "Existing submission $candidateSubId is ALREADY committed and active in Partner Center (Status: $($statusObj.status))."
-                Write-Host "Successfully submitted to Microsoft Store! Status: $($statusObj.status)"
-                "store_status=Submitted for Certification (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
-                exit 0
-              } elseif ($statusObj.status -eq "CommitFailed" -or $statusObj.status -eq "None") {
-                Write-Host "Existing submission is in state '$($statusObj.status)'. Deleting and recreating fresh submission..."
-                $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
-                Invoke-RestMethod -Method Delete -Uri $subUri -Headers $headers
-                Start-Sleep -Seconds 2
-              } else {
-                $subId = $candidateSubId
-                $subUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$candidateSubId"
-                $subObj = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
-              }
-            } catch {
-              Write-Warning "Could not query existing submission $candidateSubId status: $_"
+            $candidateUri = "$createSubUri/$candidateSubId"
+            $statusObj = Invoke-RestMethod -Method Get -Uri "$candidateUri/status" -Headers $headers
+            $candidate = Invoke-RestMethod -Method Get -Uri $candidateUri -Headers $headers
+            Write-Host "Existing submission $candidateSubId status: $($statusObj.status), category: $($candidate.applicationCategory)"
+            foreach ($pkg in $candidate.applicationPackages) {
+              Write-Host "Existing package: $($pkg.fileName), version: $($pkg.version), status: $($pkg.fileStatus)"
+            }
+            $action = Get-LuminarkSubmissionAction -Status $statusObj.status
+            if ($action -eq 'Verify') {
+              Assert-LuminarkSubmission -Submission $candidate -Version $env:VERSION
+              Write-Host "Verified existing submission for $env:VERSION; status: $($statusObj.status). Publication may still be pending."
+              "store_status=Verified existing $env:VERSION submission $candidateSubId (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+            if ($action -eq 'Edit') {
+              $subId = $candidateSubId
+              $subUri = $candidateUri
+              $subObj = $candidate
             }
           }
 
@@ -300,9 +285,7 @@ jobs:
             $releaseNotes = (Get-Content "release_notes.txt" -Raw).Trim()
           }
 
-          if (-not $releaseNotes) {
-            $releaseNotes = "Luminark v$env:VERSION update: Performance improvements, sleep prevention enhancements, and multi-monitor display fixes."
-          }
+          if (-not $releaseNotes) { throw 'Verified release notes are missing.' }
 
           Write-Host "Submitting release notes to Windows Store What's New (Length: $($releaseNotes.Length) chars):"
           Write-Host $releaseNotes
@@ -332,6 +315,15 @@ jobs:
               }
             }
           }
+
+          Write-Host "Changing Store category from '$($subObj.applicationCategory)' to UtilitiesAndTools."
+          $subObj.applicationCategory = 'UtilitiesAndTools'
+          $subObj.targetPublishMode = 'Immediate'
+          if ($subObj.packageDeliveryOptions.packageRollout) {
+            $subObj.packageDeliveryOptions.packageRollout.isPackageRollout = $false
+          }
+          $privacyUrl = 'https://github.com/silviuk/Luminark/blob/main/PRIVACY.md'
+          Write-Host "Current product privacy policy: $privacyUrl (Partner Center Properties manages this URL; obsolete listing API field is ignored)."
 
           # Configure application packages
           $msixItem = Get-Item $env:MSIX_PATH
@@ -395,7 +387,7 @@ jobs:
           Write-Host "Committing submission to Partner Center for certification..."
           $commitUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId/commit"
           $commitResp = Invoke-RestMethod -Method Post -Uri $commitUri -Headers $headers
-          Write-Host "Commit response: $($commitResp | ConvertTo-Json -Compress)"
+          Write-Host "Submission $subId commit accepted: $($commitResp.status)"
 
           Write-Host "Polling submission status..."
           $statusUri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$subId/status"
@@ -414,14 +406,14 @@ jobs:
             $pollCount++
           } while ($pollCount -lt 10)
 
-          if ($finalStatus -eq "CommitFailed") {
-            Write-Error "Submission commit failed."
-            "store_status=CommitFailed" >> $env:GITHUB_OUTPUT
-            exit 1
+          if ($finalStatus -in 'CommitFailed', 'PreProcessingFailed', 'CertificationFailed', 'ReleaseFailed', 'PublishFailed', 'Canceled') {
+            throw "Submission $subId failed: $finalStatus. Details: $($statusObj.statusDetails | ConvertTo-Json -Depth 10 -Compress)"
           }
-
-          Write-Host "Successfully committed to Microsoft Store! Status: $finalStatus"
-          "store_status=Submitted for Certification (Status: $finalStatus)" >> $env:GITHUB_OUTPUT
+          $verifiedSub = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
+          Assert-LuminarkSubmission -Submission $verifiedSub -Version $env:VERSION
+          Write-Host "Verified submitted package $env:VERSION.0 x64, category UtilitiesAndTools, immediate publication."
+          Write-Host "Submission $subId status: $finalStatus. Only Published means the update is live."
+          "store_status=Verified $env:VERSION submission $subId (Status: $finalStatus; publication/certification may still be pending)" >> $env:GITHUB_OUTPUT
 
       # -----------------------------------------------------------------------
       # Step 4: Step Summary
@@ -433,9 +425,9 @@ jobs:
           $tag = "${{ steps.release_info.outputs.tag }}"
           $version = "${{ steps.release_info.outputs.version }}"
           $wingetStatus = "${{ steps.winget.outputs.winget_status }}"
-          if (-not $wingetStatus) { $wingetStatus = if ("${{ inputs.publish_winget }}" -eq "true") { "Executed" } else { "Disabled" } }
+          if (-not $wingetStatus) { $wingetStatus = "${{ steps.winget.outcome }}" }
           $storeStatus = "${{ steps.msstore.outputs.store_status }}"
-          if (-not $storeStatus) { $storeStatus = if ("${{ inputs.publish_store }}" -eq "true") { "Executed" } else { "Disabled" } }
+          if (-not $storeStatus) { $storeStatus = "${{ steps.msstore.outcome }}" }
 
           $summary = @"
           ## 🚀 Publish to Store & WinGet Summary

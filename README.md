@@ -133,10 +133,18 @@ Luminark includes a dedicated GitHub Action workflow (`.github/workflows/publish
 1. Go to your repository on GitHub and click the **Actions** tab.
 2. Select the **"Publish to Microsoft Store and WinGet"** workflow on the left sidebar.
 3. Click **"Run workflow"**:
-   - **Release Tag**: Leave empty to auto-detect and publish the latest release, or specify a tag (e.g. `v1.0.4`).
+   - **Release Tag**: Required exact tag (for example `v1.1.19`). Wait for Build and Release to finish before publishing.
    - **Publish to WinGet**: Checkbox (default: enabled).
    - **Publish to Windows Store**: Checkbox (default: enabled).
 4. Click **"Run workflow"**.
+
+The workflow verifies the release asset SHA256 digests and the embedded MSIX identity/version before contacting Partner Center. Release notes come from the selected tag. Publication is serialized; an existing committed submission is only accepted after its package version, architecture, category and delivery settings are verified. A different active submission blocks publication instead of reporting false success.
+
+Store submissions use **Utilities + tools** (`UtilitiesAndTools`), immediate publication after certification, and no gradual rollout. Luminark is a desktop utility, not a downloadable Windows theme. The existing package name, publisher and application ID must remain stable so Store installations can upgrade normally. A successful workflow means the submission was verified; only Partner Center's **Published** status means it is live.
+
+The product privacy policy is [PRIVACY.md](https://github.com/silviuk/Luminark/blob/main/PRIVACY.md). Keep that URL configured under **Partner Center > Properties > Privacy policy URL**. The submission API's legacy `baseListing.privacyPolicy` field is ignored by Microsoft, so the workflow does not pretend to update it. Do not edit an API-created submission in the portal while its API publication is in progress.
+
+Run the publishing regression checks locally with `./Tools/Test-StorePublishing.ps1`.
 
 ### Required Repository Secrets:
 Configure these under **Settings > Secrets and variables > Actions**:

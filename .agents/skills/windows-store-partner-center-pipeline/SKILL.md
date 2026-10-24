@@ -7,6 +7,14 @@ description: >-
 
 # Windows Store & WinGet CI/CD Publishing Pipeline Guide
 
+## Luminark release safeguards
+
+Use `.github/workflows/publish-store-and-winget.yml` and `Tools/StorePublishing.ps1` as the executable publishing implementation. Supply an exact completed release tag; do not resolve "latest" while a build may still be uploading assets. Verify both SHA256 digests and the embedded MSIX identity/version. Read release notes from that tag rather than the workflow checkout. Run `Tools/Test-StorePublishing.ps1` before publishing.
+
+Existing committed submissions must match the requested package version and Store metadata before reuse. Never report a different pending submission as successful. Set `applicationCategory` to `UtilitiesAndTools`, publish immediately after certification, and disable gradual rollout. Preserve the package identity for upgrades. Only `Published` means the update is live; submission acceptance is a separate result.
+
+Use `https://manage.devcenter.microsoft.com/v1.0/my/applications` with the existing repository credentials. The historical examples below are general background, not the authoritative endpoint or state machine. The API's `baseListing.privacyPolicy` is obsolete and ignored; configure the stable `https://github.com/silviuk/Luminark/blob/main/PRIVACY.md` URL in Partner Center Properties. Do not mix portal edits into an active API-created submission.
+
 This skill provides an automated CI/CD blueprint for building desktop Windows applications (C# / WPF / WinUI), packaging them as self-contained MSIX bundles and Inno Setup installers, and publishing them directly to the Microsoft Store via the Partner Center REST API and to the Windows Package Manager (WinGet).
 
 ---

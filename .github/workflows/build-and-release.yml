@@ -21,6 +21,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - name: Verify release versions
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v([1-9][0-9]*)\.([0-9]+)\.([0-9]+)$') {
+            throw 'An explicit stable version tag is required.'
+          }
+          $expected = $env:RELEASE_TAG.Substring(1)
+          [xml]$project = Get-Content Luminark.csproj -Raw
+          [xml]$manifest = Get-Content installer/msix/AppxManifest.xml -Raw
+          if ($project.Project.PropertyGroup.Version -ne $expected -or
+              $manifest.Package.Identity.Version -ne "$expected.0") {
+            throw "Source versions must match release $env:RELEASE_TAG."
+          }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
