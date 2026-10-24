@@ -140,7 +140,7 @@ jobs:
 
           if (Test-Path "CHANGELOG.md") {
             $cl = Get-Content "CHANGELOG.md" -Raw
-            if ($cl -match "(?ms)##\s*\[?$([regex]::Escape($version))\]?.*?\r?\n(.*?)(?=\r?\n##|\Z)") {
+            if ($cl -match "(?ms)##\s*\[?$([regex]::Escape($version))\]?.*?\r?\n(.*?)(?=\r?\n##\s|\Z)") {
               $notes = $matches[1].Trim()
               Write-Host "Found release notes for v$version in CHANGELOG.md"
             }
