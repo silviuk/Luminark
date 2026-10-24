@@ -743,7 +743,8 @@ namespace Lumina.ViewModels
                     }
                     SaveSettings();
                 }
-                else if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) && !_isUpdatingMasterBrightness)
+                else if (e.PropertyName == nameof(MonitorInfo.CurrentBrightness) &&
+                         !_isUpdatingMasterBrightness && !_isUpdatingIndividualBrightness)
                 {
                     _isUpdatingIndividualBrightness = true;
                     _monitorService.SetBrightness(mon, mon.CurrentBrightness);

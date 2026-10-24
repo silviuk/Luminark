@@ -52,6 +52,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore -r win-x64
 
+      - name: Test brightness event regression
+        run: dotnet run --project Tests/BrightnessRegression -c Release
+
       - name: Publish Lumina (Framework-Dependent for Inno Setup)
         run: |
           dotnet publish -c Release -r win-x64 --self-contained false -o publish

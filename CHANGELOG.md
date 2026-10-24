@@ -4,6 +4,14 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.20] - 2026-10-24
+
+### Fixed
+- Fixed rapid hardware brightness key presses being ignored and reflected only on a later press, including Logitech keyboard controls.
+- Prevented hardware brightness observations from writing back to the laptop, eliminating the feedback loop and the 1.2-second event suppression window.
+- Fixed a disposed cancellation-token source race that could drop monitor brightness updates.
+- Added regression coverage for rapid hardware events, linked and independent monitors, disabled sync, individual edits, and rapid cancellation.
+
 ## [1.1.19] - 2026-10-18
 
 ### Added & Enhanced

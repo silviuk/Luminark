@@ -385,13 +385,15 @@ namespace Lumina.Services
 
                 var cts = new CancellationTokenSource();
                 _debounceTokens[monitor.Id] = cts;
+                // A later request can dispose the source before this worker starts.
+                var token = cts.Token;
 
                 Task.Run(async () =>
                 {
                     try
                     {
-                        await Task.Delay(40, cts.Token);
-                        if (cts.Token.IsCancellationRequested) return;
+                        await Task.Delay(40, token);
+                        if (token.IsCancellationRequested) return;
 
                         if (monitor.Type == MonitorType.DdcCi)
                         {
@@ -407,7 +409,7 @@ namespace Lumina.Services
                     {
                         App.Log($"Failed to set brightness for {monitor.FriendlyName}: {ex.Message}");
                     }
-                }, cts.Token);
+                }, token);
             }
         }
 
@@ -829,7 +831,6 @@ namespace Lumina.Services
         }
 
         private ManagementEventWatcher? _brightnessWatcher;
-        private static DateTime _lastWmiSetTime = DateTime.MinValue;
         public event EventHandler<uint>? InternalBrightnessChanged;
 
         public void StartWmiBrightnessWatcher()
@@ -844,12 +845,8 @@ namespace Lumina.Services
                 {
                     try
                     {
-                        // Ignore events triggered by Luminark itself within 1.2 seconds
-                        if (DateTime.UtcNow - _lastWmiSetTime < TimeSpan.FromMilliseconds(1200))
-                        {
-                            return;
-                        }
-
+                        // Observations update the model without writing back to WMI.
+                        // Do not suppress hardware keys following an application write.
                         if (e.NewEvent != null && e.NewEvent["Brightness"] != null)
                         {
                             uint brightness = Convert.ToByte(e.NewEvent["Brightness"]);
@@ -874,7 +871,6 @@ namespace Lumina.Services
         {
             try
             {
-                _lastWmiSetTime = DateTime.UtcNow;
                 using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT * FROM WmiMonitorBrightnessMethods");
                 using var collection = searcher.Get();
 
