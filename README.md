@@ -4,17 +4,17 @@
 
 # Luminark
 
-Bring monitor brightness, Windows themes, and day-to-night automation together in one tray app. Set each display just right, then let Luminark handle the transitions.
+Adjust your monitor brightness and switch between light and dark mode from the Windows tray. You can set each screen separately, change them all together, or let a schedule take care of it.
 
 **Windows 11 · Display & theme control**
 
-## Why Luminark?
+## What you can do
 
-- **One slider, or one per screen.** Adjust all displays together or fine-tune each monitor, with quick brightness presets.
-- **Follow your day.** Schedule light and dark themes and brightness targets, or follow Windows Night Light status.
-- **Stay in your flow.** Scroll over the tray icon for brightness. Use the flyout for supported monitor inputs, volume, sleep prevention, and screen-off controls.
+- **Adjust one screen or all of them.** Use the master slider for all screens, or adjust each one separately. Preset buttons make it easy to return to a brightness you like.
+- **Set a schedule.** Choose when to change themes and brightness, or have Luminark follow Windows Night Light.
+- **Keep the controls close.** Scroll over the tray icon to change brightness. Open the tray window for monitor input and volume controls where supported, or to keep the computer awake or turn the screens off.
 
-## See it in action
+## Screenshots
 
 <img src="docs/assets/dashboard.png" alt="Brightness and monitor controls in the dark-mode dashboard." width="700">
 
@@ -27,7 +27,7 @@ Bring monitor brightness, Windows themes, and day-to-night automation together i
 ## Get started
 
 1. Download the latest Windows installer from GitHub Releases and launch Luminark.
-2. Open the tray flyout and check that your displays are detected. Enable DDC/CI in your monitor menu if needed.
+2. Click the tray icon and check that your screens appear. You may need to turn on DDC/CI in your monitor’s own menu.
 3. Set your brightness levels and choose a schedule or Windows Night Light synchronization.
 
 ### Tray shortcuts
@@ -39,16 +39,16 @@ Bring monitor brightness, Windows themes, and day-to-night automation together i
 | Scroll over icon | Adjust master brightness by 5% |
 | Right-click | Open the tray menu |
 
-## Requirements & limits
+## Before you start
 
 Windows 11. External monitor brightness, input, and speaker controls depend on the monitor’s DDC/CI capabilities; built-in laptop brightness depends on WMI support. Source builds use the .NET SDK pinned by global.json.
 
-Available controls vary by display and connection. Some monitors, docks, and adapters do not expose every DDC/CI function.
+The controls you see depend on your monitor and how it’s connected. Some monitors, docks, and adapters don’t support every DDC/CI function.
 
-## Documentation & contributing
+## More information
 
 See [development, validation, and release instructions](docs/DEVELOPMENT.md).
 
-Found a problem or have an idea? [Open an issue](https://github.com/silviuk/Luminark/issues). If the app helps you, [support its development on Ko-fi](https://ko-fi.com/silviuvlasceanu).
+Something not working, or have a suggestion? [Open an issue](https://github.com/silviuk/Luminark/issues). If you’d like to support my work, [you can leave a tip on Ko-fi](https://ko-fi.com/silviuvlasceanu).
 
 © 2026 Silviu Vlasceanu. [License](LICENSE).
