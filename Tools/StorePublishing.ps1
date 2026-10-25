@@ -64,3 +64,75 @@ function Get-LuminarkSubmissionAction {
         default { throw "Unsupported Partner Center submission status: $Status" }
     }
 }
+
+function Get-LuminarkReleaseNotes {
+    param([Parameter(Mandatory)][string]$Changelog, [Parameter(Mandatory)][string]$Version)
+    $pattern = '(?ms)^##\s+\[' + [regex]::Escape($Version) + '\][^\r\n]*\r?\n(.*?)(?=^##\s|\z)'
+    $match = [regex]::Match($Changelog, $pattern)
+    if (-not $match.Success -or -not $match.Groups[1].Value.Trim()) { throw "No changelog entry for $Version." }
+    $notes = "What's New in Luminark v${Version}:`n`n" + $match.Groups[1].Value.Trim()
+    if ($notes.Length -gt 1500) { $notes = $notes.Substring(0, 1497) + '...' }
+    return $notes
+}
+
+function Get-LuminarkStoreScreenshots {
+    param([Parameter(Mandatory)][string]$Directory, [Parameter(Mandatory)][string]$Version)
+    $manifest = Get-Content (Join-Path $Directory 'screenshots.json') -Raw | ConvertFrom-Json
+    if ($manifest.version -cne $Version -or $manifest.language -ine 'en-us' -or
+        @($manifest.screenshots).Count -lt 1 -or @($manifest.screenshots).Count -gt 10) {
+        throw 'Screenshot manifest must identify the exact version, en-us listing, and 1-10 screenshots.'
+    }
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($shot in $manifest.screenshots) {
+        if ($shot.fileName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.-]*\.png$' -or
+            -not $names.Add($shot.fileName) -or $shot.description.Length -gt 200 -or
+            [string]::IsNullOrWhiteSpace($shot.description)) { throw 'Invalid or duplicate screenshot metadata.' }
+        $path = Join-Path $Directory $shot.fileName
+        $bytes = [IO.File]::ReadAllBytes($path)
+        if ($bytes.Length -lt 24 -or $bytes.Length -gt 50MB -or
+            [Convert]::ToHexString($bytes[0..7]) -ne '89504E470D0A1A0A') { throw 'Invalid screenshot PNG.' }
+        $width = ([int]$bytes[16] -shl 24) -bor ([int]$bytes[17] -shl 16) -bor ([int]$bytes[18] -shl 8) -bor [int]$bytes[19]
+        $height = ([int]$bytes[20] -shl 24) -bor ([int]$bytes[21] -shl 16) -bor ([int]$bytes[22] -shl 8) -bor [int]$bytes[23]
+        if ($width -lt 1366 -or $height -lt 768 -or $width -gt 3840 -or $height -gt 2160) {
+            throw "Screenshot dimensions violate desktop Store limits: $width x $height."
+        }
+        if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $shot.sha256) { throw 'Screenshot SHA256 mismatch.' }
+        [pscustomobject]@{ fileName=$shot.fileName; description=$shot.description; path=$path }
+    }
+}
+
+function Set-LuminarkListingScreenshots {
+    param([Parameter(Mandatory)]$Submission, [Parameter(Mandatory)][array]$Screenshots)
+    $listing = $Submission.listings.PSObject.Properties | Where-Object Name -ieq 'en-us'
+    if (@($listing).Count -ne 1 -or -not $listing.Value.baseListing) { throw 'Expected one existing en-us base listing.' }
+    $base = $listing.Value.baseListing
+    $images = @()
+    foreach ($image in @($base.images)) {
+        if ($null -eq $image) { continue }
+        if ($image.imageType -eq 'Screenshot') {
+            # Existing uploaded assets must be explicitly retired; preserve logos
+            # and other device-family assets. Pending files need not be retained.
+            if ($image.fileStatus -eq 'PendingUpload') { continue }
+            $image.fileStatus = 'PendingDelete'
+        }
+        $images += $image
+    }
+    foreach ($shot in $Screenshots) {
+        $images += [pscustomobject]@{ fileName=$shot.fileName; fileStatus='PendingUpload';
+            description=$shot.description; imageType='Screenshot' }
+    }
+    $base | Add-Member -NotePropertyName images -NotePropertyValue $images -Force
+}
+
+function Assert-LuminarkListingScreenshots {
+    param([Parameter(Mandatory)]$Submission, [Parameter(Mandatory)][array]$Screenshots)
+    $listing = $Submission.listings.PSObject.Properties | Where-Object Name -ieq 'en-us'
+    $images = @($listing.Value.baseListing.images | Where-Object { $_.imageType -eq 'Screenshot' -and $_.fileStatus -ne 'PendingDelete' })
+    if ($images.Count -ne $Screenshots.Count) { throw 'Submitted desktop screenshot count does not match.' }
+    foreach ($shot in $Screenshots) {
+        $found = @($images | Where-Object { $_.fileName -ceq $shot.fileName -and $_.description -ceq $shot.description })
+        if ($found.Count -ne 1 -or $found[0].fileStatus -notin 'PendingUpload','Uploaded') {
+            throw "Submitted screenshot is missing or mismatched: $($shot.fileName)"
+        }
+    }
+}
