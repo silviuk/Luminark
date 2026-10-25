@@ -12,10 +12,13 @@
     <ApplicationTitle>Luminark</ApplicationTitle>
     <AssemblyName>Luminark</AssemblyName>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <AssemblyVersion>1.1.21.0</AssemblyVersion>
-    <FileVersion>1.1.21.0</FileVersion>
-    <Version>1.1.21</Version>
+    <AssemblyVersion>1.1.22.0</AssemblyVersion>
+    <FileVersion>1.1.22.0</FileVersion>
+    <Version>1.1.22</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- The installer provisions the global runtime. A developer's DOTNET_ROOT
+         may point to an older private runtime; it must not redirect this app. -->
+    <AppHostDotNetSearch Condition="'$(SelfContained)' != 'true'">Global</AppHostDotNetSearch>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>

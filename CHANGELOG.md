@@ -4,6 +4,12 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.22] - 2026-10-25
+
+### Fixed
+- Make the Windows installer build use the globally installed .NET runtime, matching the installer's prerequisite check. A DOTNET_ROOT or DOTNET_ROOT_X64 override pointing to an older private runtime no longer causes a false missing-.NET-10 launch error.
+- Verify fresh application startup with conflicting private-runtime overrides during installer acceptance testing.
+
 ## [1.1.21] - 2026-10-24
 
 ### Fixed
