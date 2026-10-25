@@ -71,11 +71,9 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
           # Read notes from the selected release source, never the workflow's main checkout.
-          $releaseNotes = (git show "${tag}:RELEASE_NOTES.md") -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $releaseNotes -notmatch "(?m)^What's New in Luminark v$([regex]::Escape($version)):") {
-            throw "Release notes are missing or do not identify $tag."
-          }
-          $releaseNotes = $releaseNotes.Trim()
+          $changelog = (git show "${tag}:CHANGELOG.md") -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot read the changelog for $tag." }
+          $releaseNotes = Get-LuminarkReleaseNotes -Changelog $changelog -Version $version
 
           # Store API releaseNotes character limit is 1500 chars
           if ($releaseNotes.Length -gt 1500) {
@@ -206,6 +204,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           . ./Tools/StorePublishing.ps1
           $null = Get-LuminarkPackageIdentity -Path $env:MSIX_PATH -Version $env:VERSION
+          $screenshots = @(Get-LuminarkStoreScreenshots -Directory "StoreAssets/$env:VERSION" -Version $env:VERSION)
+          Write-Host "Validated $($screenshots.Count) desktop screenshots for $env:VERSION."
 
           $missingSecrets = @()
           if (-not $env:TENANT_ID) { $missingSecrets += "MS_STORE_TENANT_ID" }
@@ -260,6 +260,7 @@ jobs:
             $action = Get-LuminarkSubmissionAction -Status $statusObj.status
             if ($action -eq 'Verify') {
               Assert-LuminarkSubmission -Submission $candidate -Version $env:VERSION -AllowPendingUpload:($statusObj.status -eq 'CommitStarted')
+              Assert-LuminarkListingScreenshots -Submission $candidate -Screenshots $screenshots
               Write-Host "Verified existing submission for $env:VERSION; status: $($statusObj.status). Publication may still be pending."
               "store_status=Verified existing $env:VERSION submission $candidateSubId (Status: $($statusObj.status))" >> $env:GITHUB_OUTPUT
               exit 0
@@ -324,6 +325,9 @@ jobs:
             }
           }
 
+          Set-LuminarkListingScreenshots -Submission $subObj -Screenshots $screenshots
+          Assert-LuminarkListingScreenshots -Submission $subObj -Screenshots $screenshots
+
           Write-Host "Changing Store category from '$($subObj.applicationCategory)' to UtilitiesAndTools."
           $subObj.applicationCategory = 'UtilitiesAndTools'
           $subObj.targetPublishMode = 'Immediate'
@@ -364,6 +368,9 @@ jobs:
           $bundleDir = Join-Path $tempUploadDir "bundle"
           New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
           Copy-Item -Path $msixItem.FullName -Destination (Join-Path $bundleDir $msixFileName)
+          foreach ($shot in $screenshots) {
+            Copy-Item -LiteralPath $shot.path -Destination (Join-Path $bundleDir $shot.fileName)
+          }
 
           $zipPath = Join-Path $tempUploadDir "Upload.zip"
           Compress-Archive -Path "$bundleDir\*" -DestinationPath $zipPath
@@ -419,6 +426,8 @@ jobs:
           }
           $verifiedSub = Invoke-RestMethod -Method Get -Uri $subUri -Headers $headers
           Assert-LuminarkSubmission -Submission $verifiedSub -Version $env:VERSION -AllowPendingUpload:($finalStatus -eq 'CommitStarted')
+          Assert-LuminarkListingScreenshots -Submission $verifiedSub -Screenshots $screenshots
+          Write-Host "Verified $($screenshots.Count) current desktop screenshots in the en-us Store listing."
           foreach ($pkg in $verifiedSub.applicationPackages) {
             Write-Host "Submitted package: $($pkg.fileName), version: $($pkg.version), status: $($pkg.fileStatus)"
           }

@@ -1,0 +1,46 @@
+{
+  "version": "1.1.23",
+  "language": "en-us",
+  "screenshots": [
+    {
+      "fileName": "luminark-1.1.23-dashboard-light.png",
+      "description": "Light-mode dashboard with hardware brightness controls and connected displays.",
+      "sha256": "586b0143277dd3b0443b24eab74ac5f260949ff7f33d58e5224ca96f4d7d8232"
+    },
+    {
+      "fileName": "luminark-1.1.23-dashboard-dark.png",
+      "description": "Dark-mode dashboard with synchronized brightness and monitor input controls.",
+      "sha256": "02f8e14110032c74298d9582ace12c14bece4bb5341f6a4a2614f73d7eee2c38"
+    },
+    {
+      "fileName": "luminark-1.1.23-automation-light.png",
+      "description": "Schedule light and dark themes and synchronize with Windows Night Light.",
+      "sha256": "fc605e40d015bc71f8ae77950937a557f5cdfe9a90fc1aa7ed1ce5362c925c74"
+    },
+    {
+      "fileName": "luminark-1.1.23-automation-dark.png",
+      "description": "Automatic theme scheduling and Night Light synchronization in dark mode.",
+      "sha256": "4d29e98d0d2216354baa2f40c4e943fad8a5762f5090f45dde8350fdd58ca61f"
+    },
+    {
+      "fileName": "luminark-1.1.23-settings-light.png",
+      "description": "Configure Windows startup, tray behavior, sleep prevention and keyboard shortcuts.",
+      "sha256": "0336d6c427a9421cc3aa19c4fd204f6fcb60478f3ec8580d5e38b5a657aa8a32"
+    },
+    {
+      "fileName": "luminark-1.1.23-settings-dark.png",
+      "description": "System integration and tray preferences in dark mode.",
+      "sha256": "122978c2eb1d9e004ae0d10e661e6599d11cde697a53670f975f52215fecc8c4"
+    },
+    {
+      "fileName": "luminark-1.1.23-mini-light.png",
+      "description": "Quick brightness, theme and display controls from the tray mini window in light mode.",
+      "sha256": "2e64a7dfa9621ec453c1668cb467a4e3c1317f85a58c065c624921f4b6f9b1ba"
+    },
+    {
+      "fileName": "luminark-1.1.23-mini-dark.png",
+      "description": "The compact tray mini window provides quick display controls in dark mode.",
+      "sha256": "b9e4cbf493aa9086260e1f1d43a96bf230f1f6e0c599961df948ce02ac3c7270"
+    }
+  ]
+}
