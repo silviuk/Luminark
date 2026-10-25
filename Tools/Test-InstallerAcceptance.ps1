@@ -44,15 +44,7 @@ try {
     if (-not (Test-Path -LiteralPath $runtimeDirectory)) { throw 'The bootstrapper did not restore the required desktop runtime.' }
     $exe = Join-Path $appDirectory 'Luminark.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Application binary was not installed.' }
-    $appProcess = Start-Process $exe -ArgumentList '--minimized' -WindowStyle Hidden -PassThru
-    Start-Sleep -Seconds 8
-    $appProcess.Refresh()
-    if ($appProcess.HasExited) { throw "Installed application exited during startup: $($appProcess.ExitCode)" }
-    $log = Join-Path $env:LOCALAPPDATA 'Luminark/luminark.log'
-    if (-not (Test-Path -LiteralPath $log) -or
-        (Get-Content -LiteralPath $log -Raw) -notmatch 'Application_Startup completed successfully') {
-        throw 'Installed application did not confirm successful startup.'
-    }
+    & "$PSScriptRoot/Test-AppHostRuntime.ps1" -Exe $exe -WorkDirectory $work
     Write-Host 'PASS: missing desktop runtime files, verified bootstrapper install/repair, application install and startup'
 } finally {
     if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force }
