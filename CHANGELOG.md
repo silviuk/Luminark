@@ -4,6 +4,14 @@ All notable changes to Luminark are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.23] - 2026-10-25
+
+### Fixed
+- Refresh every primary and secondary taskbar after changing the Windows theme, including explicit shell theme-resource invalidation.
+- Serialize and coalesce shell refreshes so rapid theme changes cannot start overlapping broadcasts.
+- Read the latest theme when queued preference callbacks run; coalesce duplicate callbacks and ignore pending work after shutdown.
+- Add regression coverage for stale theme callbacks, rapid switches, multiple secondary taskbars and disposal.
+
 ## [1.1.22] - 2026-10-25
 
 ### Fixed
