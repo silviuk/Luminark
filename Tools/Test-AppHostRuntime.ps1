@@ -3,6 +3,12 @@ param(
     [Parameter(Mandatory)][string]$WorkDirectory
 )
 $ErrorActionPreference = 'Stop'
+function Read-ActiveLog([string]$Path) {
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+        [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+    $reader = [IO.StreamReader]::new($stream)
+    try { $reader.ReadToEnd() } finally { $reader.Dispose() }
+}
 $exePath = (Resolve-Path -LiteralPath $Exe).Path
 if (Get-Process Luminark -ErrorAction SilentlyContinue) {
     throw 'Close Luminark before testing apphost startup to avoid single-instance forwarding.'
@@ -38,7 +44,7 @@ foreach ($override in 'None', 'DOTNET_ROOT', 'DOTNET_ROOT_X64') {
                 throw "Apphost failed with $override (exit $($app.ExitCode)): $($app.StandardError.ReadToEnd())"
             }
             if (-not (Test-Path -LiteralPath $logPath)) { continue }
-            $newLog = [IO.File]::ReadAllText($logPath)
+            $newLog = Read-ActiveLog $logPath
             $addedLog = if ($newLog.StartsWith($oldLog, [StringComparison]::Ordinal)) {
                 $newLog.Substring($oldLog.Length)
             } else { $newLog }
