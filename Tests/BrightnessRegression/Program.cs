@@ -48,6 +48,7 @@ internal static class Program
         CheckHardwareBurst(linked: true, enabled: false);
         CheckRapidDebounce();
         ReliabilityChecks.Run();
+        ThemeChecks.Run();
         Console.WriteLine("PASS: rapid hardware events, linked/independent/disabled sync, user edits, debounce cancellation");
     }
 

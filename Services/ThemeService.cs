@@ -1,158 +1,116 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Win32;
 using Wpf.Ui.Appearance;
 
-namespace Lumina.Services
+namespace Lumina.Services;
+
+public class ThemeService : IDisposable
 {
-    public class ThemeService : IDisposable
+    private const string PersonalizeKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+    private readonly Func<bool> _readAppsTheme;
+    private readonly Func<bool> _readSystemTheme;
+    private readonly Action<bool> _writeTheme;
+    private readonly Action<bool> _applyAppTheme;
+    private readonly ThemeRefreshQueue _refreshQueue;
+    private readonly UserPreferenceChangedEventHandler _userPrefChangedHandler;
+    private readonly object _writeGate = new();
+    private (bool Apps, bool System) _lastNotified;
+    private int _uiRefreshQueued;
+    private int _disposed;
+    public event Action<bool>? ThemeChanged;
+
+    public ThemeService() : this(
+        () => ReadTheme("AppsUseLightTheme"), () => ReadTheme("SystemUsesLightTheme"),
+        WriteTheme, WindowsThemeNotifier.Refresh,
+        isLight => ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark,
+            Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: true), subscribe: true) { }
+
+    internal ThemeService(Func<bool> readAppsTheme, Func<bool> readSystemTheme, Action<bool> writeTheme,
+        Action refreshShell, Action<bool> applyAppTheme, bool subscribe = false)
     {
-        private const string PersonalizeKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-
-        public event Action<bool>? ThemeChanged;
-        private readonly UserPreferenceChangedEventHandler _userPrefChangedHandler;
-
-        public ThemeService()
+        _readAppsTheme = readAppsTheme;
+        _readSystemTheme = readSystemTheme;
+        _writeTheme = writeTheme;
+        _applyAppTheme = applyAppTheme;
+        _refreshQueue = new ThemeRefreshQueue(refreshShell);
+        _lastNotified = (IsLightTheme(), IsSystemLightTheme());
+        _userPrefChangedHandler = (_, e) =>
         {
-            _userPrefChangedHandler = (s, e) =>
-            {
-                if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color || e.Category == UserPreferenceCategory.Window)
-                {
-                    bool isLight = IsLightTheme();
-                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
-                    {
-                        try
-                        {
-                            ApplicationThemeManager.Apply(
-                                isLight ? ApplicationTheme.Light : ApplicationTheme.Dark,
-                                Wpf.Ui.Controls.WindowBackdropType.None,
-                                updateAccent: true);
-                        }
-                        catch { }
-                        ThemeChanged?.Invoke(isLight);
-                    });
-                }
-            };
+            if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.Window)
+                RefreshFromSystem();
+        };
+        if (subscribe) { try { SystemEvents.UserPreferenceChanged += _userPrefChangedHandler; } catch { } }
+    }
 
-            try
-            {
-                SystemEvents.UserPreferenceChanged += _userPrefChangedHandler;
-            }
-            catch { }
-        }
+    public bool IsLightTheme() => _readAppsTheme();
+    public bool IsSystemLightTheme() => _readSystemTheme();
 
-        public void Dispose()
+    public void SetTheme(bool isLight)
+    {
+        try
         {
-            try
+            lock (_writeGate)
             {
-                SystemEvents.UserPreferenceChanged -= _userPrefChangedHandler;
+                if (Volatile.Read(ref _disposed) != 0) return;
+                _writeTheme(isLight);
+                _refreshQueue.Request();
             }
-            catch { }
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher?.CheckAccess() == true) UpdateApplicationTheme();
+            else RefreshFromSystem();
         }
+        catch (Exception ex) { App.Log($"[ThemeService] Failed to set theme: {ex.Message}"); }
+    }
 
-        public bool IsLightTheme()
+    internal void RefreshFromSystem()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (Volatile.Read(ref _disposed) != 0 || dispatcher == null || dispatcher.HasShutdownStarted) return;
+        if (Interlocked.Exchange(ref _uiRefreshQueued, 1) != 0) return;
+        try { dispatcher.BeginInvoke(() =>
         {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath);
-                if (key != null)
-                {
-                    object? appsVal = key.GetValue("AppsUseLightTheme");
-                    if (appsVal is int intVal)
-                    {
-                        return intVal == 1;
-                    }
-                }
-            }
-            catch
-            {
-                // Fallback
-            }
-            return false;
-        }
+            Interlocked.Exchange(ref _uiRefreshQueued, 0);
+            UpdateApplicationTheme();
+        }); }
+        catch (InvalidOperationException) { Interlocked.Exchange(ref _uiRefreshQueued, 0); }
+    }
 
-        public bool IsSystemLightTheme()
+    private void UpdateApplicationTheme()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        // A newer toggle may have completed while SystemEvents waited in the UI
+        // queue. Read the current state here, rather than replay a captured theme.
+        (bool Apps, bool System) current;
+        lock (_writeGate) current = (IsLightTheme(), IsSystemLightTheme());
+        try { _applyAppTheme(current.Apps); } catch { }
+        if (current == _lastNotified) return;
+        _lastNotified = current;
+        ThemeChanged?.Invoke(current.Apps);
+    }
+
+    private static bool ReadTheme(string name)
+    {
+        try
         {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath);
-                if (key != null)
-                {
-                    object? sysVal = key.GetValue("SystemUsesLightTheme");
-                    if (sysVal is int intVal)
-                    {
-                        return intVal == 1;
-                    }
-                }
-            }
-            catch
-            {
-                // Fallback
-            }
-            return false;
+            using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath);
+            return key?.GetValue(name) is int value && value == 1;
         }
+        catch { return false; }
+    }
 
-        public void SetTheme(bool isLight)
+    private static void WriteTheme(bool isLight)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(PersonalizeKeyPath);
+        key.SetValue("SystemUsesLightTheme", isLight ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("AppsUseLightTheme", isLight ? 1 : 0, RegistryValueKind.DWord);
+    }
+
+    public void Dispose()
+    {
+        lock (_writeGate)
         {
-            try
-            {
-                using (var key = Registry.CurrentUser.CreateSubKey(PersonalizeKeyPath))
-                {
-                    if (key != null)
-                    {
-                        key.SetValue("AppsUseLightTheme", isLight ? 1 : 0, RegistryValueKind.DWord);
-                        key.SetValue("SystemUsesLightTheme", isLight ? 1 : 0, RegistryValueKind.DWord);
-                    }
-                }
-
-                // Asynchronously broadcast change to avoid blocking UI thread
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        NativeMethods.SendMessageTimeout(
-                            (IntPtr)NativeMethods.HWND_BROADCAST,
-                            NativeMethods.WM_SETTINGCHANGE,
-                            UIntPtr.Zero,
-                            "ImmersiveColorSet",
-                            NativeMethods.SMTO_ABORTIFHUNG,
-                            500,
-                            out _);
-
-                        NativeMethods.SendMessageTimeout(
-                            (IntPtr)NativeMethods.HWND_BROADCAST,
-                            NativeMethods.WM_SETTINGCHANGE,
-                            UIntPtr.Zero,
-                            "PolicyChanged",
-                            NativeMethods.SMTO_ABORTIFHUNG,
-                            500,
-                            out _);
-                    }
-                    catch { }
-                });
-
-                // Update WPF-UI app theme safely
-                if (System.Windows.Application.Current != null)
-                {
-                    if (System.Windows.Application.Current.Dispatcher.CheckAccess())
-                    {
-                        try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: true); } catch { }
-                    }
-                    else
-                    {
-                        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
-                        {
-                            try { ApplicationThemeManager.Apply(isLight ? ApplicationTheme.Light : ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.None, updateAccent: true); } catch { }
-                        });
-                    }
-                }
-
-                ThemeChanged?.Invoke(isLight);
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[ThemeService] Failed to set theme: {ex.Message}");
-            }
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _refreshQueue.Dispose();
         }
+        try { SystemEvents.UserPreferenceChanged -= _userPrefChangedHandler; } catch { }
     }
 }
